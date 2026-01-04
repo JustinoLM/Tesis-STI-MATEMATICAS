@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Variables CSS personalizables por narrativa */
+:root {
+  --color-primary: #3b82f6;     /* blue-500 por defecto */
+  --color-secondary: #8b5cf6;   /* violet-500 por defecto */
+  --color-accent: #f59e0b;      /* amber-500 por defecto */
+}
+
+/* Narrativa: Piratas */
+[data-narrative="pirates"] {
+  --color-primary: #dc2626;     /* red-600 */
+  --color-secondary: #78350f;   /* brown-900 */
+  --color-accent: #fbbf24;      /* amber-400 */
+}
+
+/* Narrativa: Astronautas */
+[data-narrative="astronauts"] {
+  --color-primary: #2563eb;     /* blue-600 */
+  --color-secondary: #7c3aed;   /* violet-600 */
+  --color-accent: #06b6d4;      /* cyan-500 */
+}
+
+/* Narrativa: Magos */
+[data-narrative="magicians"] {
+  --color-primary: #7c3aed;     /* violet-600 */
+  --color-secondary: #db2777;   /* pink-600 */
+  --color-accent: #a855f7;      /* purple-500 */
+}
+
+/* Narrativa: Caballeros */
+[data-narrative="knights"] {
+  --color-primary: #0891b2;     /* cyan-600 */
+  --color-secondary: #64748b;   /* slate-500 */
+  --color-accent: #f59e0b;      /* amber-500 */
+}
+
+/* Narrativa: Cowboys */
+[data-narrative="cowboys"] {
+  --color-primary: #c2410c;     /* orange-700 */
+  --color-secondary: #78350f;   /* brown-900 */
+  --color-accent: #eab308;      /* yellow-500 */
+}
+
+/* Narrativa: Princesas Inventoras */
+[data-narrative="princess-inventors"] {
+  --color-primary: #ec4899;     /* pink-500 */
+  --color-secondary: #8b5cf6;   /* violet-500 */
+  --color-accent: #14b8a6;      /* teal-500 */
+}
+
+/* Estilos base */
+body {
+  @apply font-sans antialiased;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  @apply font-display;
+}
+
+/* Botones grandes para tablets (mínimo 44x44px para touch) */
+button {
+  @apply min-h-[44px] min-w-[44px];
+}
+
+/* Animaciones suaves */
+* {
+  @apply transition-colors duration-200;
+}

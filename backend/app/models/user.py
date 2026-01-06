@@ -1,8 +1,8 @@
 """
 Modelos de usuarios del sistema.
 
-Implementa herencia de tabla única (Single Table Inheritance) donde
-Usuario es la clase base y Estudiante/Profesor heredan de ella.
+Sistema de autenticación basado en códigos únicos (no emails).
+Los usuarios son creados por administradores, no hay registro público.
 """
 
 from datetime import datetime
@@ -23,17 +23,18 @@ class Usuario(Base):
     """
     Clase base para todos los usuarios del sistema.
     
-    Usa Single Table Inheritance (STI) con discriminador en tipo_usuario.
+    Autenticación: codigo único + password (sin email)
     """
     __tablename__ = "usuario"
     
     # Campos principales
     id = Column(Integer, primary_key=True, index=True)
-    email = Column(String(255), unique=True, nullable=False, index=True)
+    email = Column(String(255), nullable=True, index=True)  # Opcional para notificaciones
     password_hash = Column(String(255), nullable=False)
     tipo_usuario = Column(Enum(TipoUsuario), nullable=False)
     fecha_creacion = Column(DateTime, default=datetime.utcnow, nullable=False)
     ultimo_acceso = Column(DateTime, nullable=True)
+    activo = Column(Integer, default=1, nullable=False)  # 1=activo, 0=inactivo
     
     # Configuración de herencia
     __mapper_args__ = {
@@ -42,18 +43,14 @@ class Usuario(Base):
     }
     
     def __repr__(self):
-        return f"<Usuario(id={self.id}, email={self.email}, tipo={self.tipo_usuario})>"
+        return f"<Usuario(id={self.id}, tipo={self.tipo_usuario})>"
 
 
 class Estudiante(Usuario):
     """
-    Modelo de estudiante que hereda de Usuario.
+    Modelo de estudiante.
     
-    Relaciones:
-    - Pertenece a múltiples Grupos (N:M via EstudianteGrupo)
-    - Tiene un PerfilEstudiante (1:1)
-    - Tiene múltiples Intentos (1:N)
-    - Tiene múltiples Medallas (N:M via EstudianteMedalla)
+    Login: codigo_estudiante + password
     """
     __tablename__ = "estudiante"
     
@@ -76,21 +73,19 @@ class Estudiante(Usuario):
     }
     
     def __repr__(self):
-        return f"<Estudiante(id={self.id}, nombre={self.nombre_completo})>"
+        return f"<Estudiante(codigo={self.codigo_estudiante}, nombre={self.nombre_completo})>"
 
 
 class Profesor(Usuario):
     """
-    Modelo de profesor que hereda de Usuario.
+    Modelo de profesor.
     
-    Relaciones:
-    - Tiene múltiples Grupos (1:N)
-    - Crea múltiples ConfiguracionesPractica (1:N)
-    - Crea múltiples Desafíos (1:N)
+    Login: codigo_profesor + password
     """
     __tablename__ = "profesor"
     
     id = Column(Integer, ForeignKey("usuario.id"), primary_key=True)
+    codigo_profesor = Column(String(50), unique=True, nullable=False, index=True)
     nombre_completo = Column(String(255), nullable=False)
     institucion = Column(String(255), nullable=True)
     
@@ -106,4 +101,4 @@ class Profesor(Usuario):
     }
     
     def __repr__(self):
-        return f"<Profesor(id={self.id}, nombre={self.nombre_completo})>"
+        return f"<Profesor(codigo={self.codigo_profesor}, nombre={self.nombre_completo})>"

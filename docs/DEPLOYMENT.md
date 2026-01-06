@@ -1,168 +1,120 @@
-# Guía de Deployment
+# Guía de Deployment Manual
 
-Este documento explica cómo desplegar el Sistema de Tutoría Inteligente a producción.
-
-## Servicios de Hosting
-
-- **Backend:** Railway (https://railway.app)
-- **Frontend:** Vercel (https://vercel.com)
-- **Base de Datos:** Railway PostgreSQL (incluido con backend)
+Este documento explica cómo desplegar el Sistema de Tutoría Inteligente a producción de forma **manual**.
 
 ---
 
-## Deployment Inicial (Primera vez)
+## Filosofía de Deployment
 
-### 1. Configurar Railway (Backend + PostgreSQL)
+Este proyecto usa **deployment manual controlado** en vez de CI/CD automático porque:
 
-#### 1.1. Crear cuenta en Railway
+✅ **Simplicidad:** No requiere configurar GitHub Actions, secrets, ni workflows complejos  
+✅ **Control:** El desarrollador decide exactamente cuándo desplegar  
+✅ **Transparencia:** Cada paso es visible y entendible  
+✅ **Apropiado para MVP:** Un proyecto académico no requiere deploys automáticos  
 
-1. Visitar https://railway.app
-2. Sign up con GitHub
-3. Conectar repositorio del proyecto
+---
 
-#### 1.2. Crear proyecto nuevo
+## Prerrequisitos
+
+Antes de hacer el primer deployment, necesitas:
+
+### 1. Cuentas en servicios de hosting
+
+- [x] **Railway** (https://railway.app) - Backend + PostgreSQL
+- [x] **Vercel** (https://vercel.com) - Frontend
+- [x] **Cloudinary** (https://cloudinary.com) - Almacenamiento de assets
+
+### 2. CLIs instaladas
 ```bash
-# Instalar Railway CLI
+# Railway CLI
 npm install -g @railway/cli
 
-# Login
+# Vercel CLI
+npm install -g vercel
+
+# Verificar instalación
+railway --version
+vercel --version
+```
+
+### 3. Autenticación
+```bash
+# Login en Railway
 railway login
 
-# Crear proyecto
+# Login en Vercel
+vercel login
+```
+
+---
+
+## Setup Inicial (Primera vez)
+
+### Paso 1: Configurar Railway (Backend + PostgreSQL)
+
+#### 1.1. Crear proyecto
+```bash
+cd backend
 railway init
 ```
 
-#### 1.3. Agregar PostgreSQL
+Esto crea un nuevo proyecto en Railway vinculado a tu directorio.
 
-1. Dashboard de Railway → New → Database → PostgreSQL
-2. Railway automáticamente agrega `DATABASE_URL` a las variables de entorno
-
-#### 1.4. Configurar variables de entorno
-
-Railway Dashboard → Variables → Add:
-```
-SECRET_KEY=<generar con: openssl rand -hex 32>
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-OLLAMA_BASE_URL=<URL de servicio Ollama en Railway>
-CLOUDINARY_CLOUD_NAME=<de Cloudinary dashboard>
-CLOUDINARY_API_KEY=<de Cloudinary dashboard>
-CLOUDINARY_API_SECRET=<de Cloudinary dashboard>
-BACKEND_CORS_ORIGINS=["https://sti-frontend.vercel.app"]
-ENVIRONMENT=production
-DEBUG=False
+#### 1.2. Agregar PostgreSQL
+```bash
+railway add --plugin postgresql
 ```
 
-#### 1.5. Deploy manual inicial
+Railway automáticamente:
+- Crea una base de datos PostgreSQL
+- Agrega `DATABASE_URL` a las variables de entorno
+
+#### 1.3. Configurar variables de entorno
+```bash
+# Generar SECRET_KEY
+SECRET_KEY=$(openssl rand -hex 32)
+
+# Agregar variables
+railway variables set SECRET_KEY=$SECRET_KEY
+railway variables set ALGORITHM=HS256
+railway variables set ACCESS_TOKEN_EXPIRE_MINUTES=30
+railway variables set ENVIRONMENT=production
+railway variables set DEBUG=False
+railway variables set 'BACKEND_CORS_ORIGINS=["https://sti-frontend.vercel.app"]'
+```
+
+**IMPORTANTE:** Reemplaza `sti-frontend.vercel.app` con tu URL real de Vercel (la obtendrás después).
+
+**Cloudinary (configurar cuando implementes videos):**
+```bash
+railway variables set CLOUDINARY_CLOUD_NAME=tu-cloud-name
+railway variables set CLOUDINARY_API_KEY=tu-api-key
+railway variables set CLOUDINARY_API_SECRET=tu-api-secret
+```
+
+#### 1.4. Deploy inicial
 ```bash
 railway up
 ```
 
-#### 1.6. Ejecutar migraciones
+Espera a que termine. Railway te dará una URL como: `https://sti-backend.railway.app`
+
+#### 1.5. Ejecutar migraciones
 ```bash
+# Conectar a la base de datos en Railway
 railway run alembic upgrade head
+
+# Insertar datos iniciales
 railway run python scripts/seed_data.py
 ```
 
----
-
-### 2. Configurar Vercel (Frontend)
-
-#### 2.1. Crear cuenta en Vercel
-
-1. Visitar https://vercel.com
-2. Sign up con GitHub
-3. Import Project → Seleccionar repositorio
-
-#### 2.2. Configurar proyecto
-
-- **Framework Preset:** Vite
-- **Root Directory:** `frontend`
-- **Build Command:** `pnpm build`
-- **Output Directory:** `dist`
-
-#### 2.3. Configurar variables de entorno
-
-Vercel Dashboard → Settings → Environment Variables:
-```
-VITE_API_BASE_URL=https://sti-backend.railway.app/api
-```
-
-**IMPORTANTE:** Reemplazar `sti-backend.railway.app` con tu URL real de Railway.
-
-#### 2.4. Deploy
-
-Vercel despliega automáticamente. Esperar a que termine.
-
----
-
-### 3. Configurar Deployment Automático (CI/CD)
-
-#### 3.1. Obtener tokens
-
-**Railway Token:**
-```bash
-railway login
-railway token
-```
-
-**Vercel Token:**
-1. Vercel Dashboard → Settings → Tokens
-2. Create Token → Copiar
-
-**Vercel Project IDs:**
-```bash
-cd frontend
-vercel link
-# Esto crea .vercel/project.json con org_id y project_id
-cat .vercel/project.json
-```
-
-#### 3.2. Configurar GitHub Secrets
-
-GitHub Repository → Settings → Secrets and variables → Actions → New repository secret:
-```
-RAILWAY_TOKEN=<token de Railway>
-VERCEL_TOKEN=<token de Vercel>
-VERCEL_ORG_ID=<de .vercel/project.json>
-VERCEL_PROJECT_ID=<de .vercel/project.json>
-```
-
-#### 3.3. Verificar workflows
-
-Los workflows en `.github/workflows/` ahora funcionarán automáticamente:
-
-- **ci.yml:** Se ejecuta en cada push/PR
-- **cd.yml:** Despliega en cada merge a main
-
----
-
-## Deployment Manual (Sin CI/CD)
-
-### Backend (Railway)
-```bash
-cd backend
-railway up --service backend
-```
-
-### Frontend (Vercel)
-```bash
-cd frontend
-vercel --prod
-```
-
----
-
-## Verificación Post-Deployment
-
-### Backend
-
-1. **Health check:**
+#### 1.6. Verificar
 ```bash
 curl https://sti-backend.railway.app/health
 ```
 
-Respuesta esperada:
+Deberías ver:
 ```json
 {
   "status": "healthy",
@@ -171,50 +123,223 @@ Respuesta esperada:
 }
 ```
 
-2. **Swagger UI:**
-Visitar: https://sti-backend.railway.app/docs
+---
 
-### Frontend
+### Paso 2: Configurar Vercel (Frontend)
 
-1. Visitar: https://sti-frontend.vercel.app
-2. Verificar que carga correctamente
-3. Abrir DevTools → Network → Verificar que llama a la API correcta
+#### 2.1. Link del proyecto
+```bash
+cd frontend
+vercel link
+```
+
+Responde:
+- **Setup and deploy?** → Yes
+- **Scope** → Tu usuario
+- **Link to existing project?** → No
+- **Project name** → sti-frontend (o el que prefieras)
+- **Directory** → `./` (estás en frontend/)
+
+Esto crea `.vercel/project.json` con los IDs del proyecto.
+
+#### 2.2. Configurar variable de entorno
+```bash
+# Reemplaza con tu URL real de Railway
+vercel env add VITE_API_BASE_URL production
+# Pegar: https://sti-backend.railway.app/api
+```
+
+#### 2.3. Deploy inicial
+```bash
+vercel --prod
+```
+
+Vercel te dará una URL como: `https://sti-frontend.vercel.app`
+
+#### 2.4. Actualizar CORS en backend
+
+Ahora que tienes la URL de Vercel, actualiza el backend:
+```bash
+cd ../backend
+railway variables set 'BACKEND_CORS_ORIGINS=["https://sti-frontend.vercel.app"]'
+
+# Redeploy backend para aplicar cambio
+railway up
+```
 
 ---
 
-## Rollback
+## Deployment Regular (Después del setup inicial)
 
-### Rollback de Backend (Railway)
+### Opción 1: Script Automático (Recomendado)
+
+Desde la raíz del proyecto:
+```bash
+./deploy.sh
+```
+
+Este script:
+1. ✅ Ejecuta tests de backend
+2. ✅ Ejecuta tests de frontend
+3. ✅ Pide confirmación
+4. ✅ Despliega backend a Railway
+5. ✅ Despliega frontend a Vercel
+
+### Opción 2: Paso a Paso Manual
+
+#### Backend:
+```bash
+# 1. Tests locales
+cd backend
+./test.sh
+
+# 2. Deploy
+railway up
+
+# 3. Si hay migraciones nuevas
+railway run alembic upgrade head
+```
+
+#### Frontend:
+```bash
+# 1. Tests locales
+cd frontend
+./test.sh
+
+# 2. Deploy
+vercel --prod
+```
+
+---
+
+## Testing Local Antes de Deploy
+
+### Backend
+```bash
+cd backend
+./test.sh
+```
+
+Esto ejecuta:
+- Linting con Ruff
+- Formato con Black
+- Tests con pytest
+- Coverage report
+
+### Frontend
+```bash
+cd frontend
+./test.sh
+```
+
+Esto ejecuta:
+- Linting con ESLint
+- Tests con Vitest
+- Build de producción
+
+---
+
+## Gestión de Base de Datos
+
+### Crear nueva migración
+```bash
+cd backend
+
+# Después de modificar modelos en app/models/
+alembic revision --autogenerate -m "descripción del cambio"
+
+# Revisar el archivo generado en alembic/versions/
+
+# Aplicar localmente (para probar)
+alembic upgrade head
+
+# Aplicar en producción
+railway run alembic upgrade head
+```
+
+### Rollback de migración
+```bash
+# Localmente
+alembic downgrade -1
+
+# En producción
+railway run alembic downgrade -1
+```
+
+### Backup de base de datos
+```bash
+# Conectar al shell de Railway
+railway connect postgres
+
+# Dentro del shell:
+pg_dump sti_db > backup_$(date +%Y%m%d).sql
+```
+
+---
+
+## Rollback de Deployments
+
+### Backend (Railway)
 
 Railway mantiene historial de deployments:
 
-1. Dashboard → Deployments
-2. Seleccionar deployment anterior
-3. Redeploy
+1. Dashboard de Railway → Tu proyecto → Deployments
+2. Seleccionar deployment anterior que funcionaba
+3. Click en los 3 puntos → "Redeploy"
 
-### Rollback de Frontend (Vercel)
+O desde CLI:
 ```bash
+railway status  # Ver deployments recientes
+railway rollback  # Rollback al anterior
+```
+
+### Frontend (Vercel)
+```bash
+# Ver deployments
+vercel ls
+
+# Rollback al anterior
 vercel rollback
 ```
 
 O desde dashboard:
-1. Vercel Dashboard → Deployments
-2. Seleccionar deployment anterior → Promote to Production
+1. Vercel Dashboard → Tu proyecto → Deployments
+2. Seleccionar deployment anterior
+3. "Promote to Production"
 
 ---
 
-## Monitoreo
+## Monitoreo Post-Deployment
 
-### Logs de Backend (Railway)
+### Logs en tiempo real
+
+**Backend:**
 ```bash
 railway logs
 ```
 
-O desde dashboard: Railway → Deployments → View Logs
+**Frontend:**
+```bash
+vercel logs
+```
 
-### Logs de Frontend (Vercel)
+### Health Checks
+```bash
+# Backend health
+curl https://sti-backend.railway.app/health
 
-Vercel Dashboard → Deployments → [Deployment] → Runtime Logs
+# Frontend (verificar que carga)
+curl -I https://sti-frontend.vercel.app
+```
+
+### Verificar conectividad Backend-Frontend
+```bash
+# Desde navegador:
+# 1. Abrir DevTools (F12)
+# 2. Ir a Network tab
+# 3. Navegar por el frontend
+# 4. Verificar que las llamadas a /api/ responden 200
+```
 
 ---
 
@@ -222,31 +347,58 @@ Vercel Dashboard → Deployments → [Deployment] → Runtime Logs
 
 ### Error: "DATABASE_URL not found"
 
+**Causa:** Variable de entorno no está configurada en Railway
+
 **Solución:**
-1. Verificar que PostgreSQL está agregado en Railway
-2. Variables → Verificar que `DATABASE_URL` existe
-3. Redeploy
+```bash
+railway variables
+# Verificar que DATABASE_URL existe
+# Si no existe, el addon de PostgreSQL no está agregado
+railway add --plugin postgresql
+```
 
 ### Error: "CORS policy blocked"
 
+**Causa:** El backend no permite requests desde el frontend
+
 **Solución:**
-1. Backend `.env` → `BACKEND_CORS_ORIGINS` incluye URL de Vercel
-2. Frontend `.env` → `VITE_API_BASE_URL` apunta a Railway
-3. Redeploy ambos servicios
+```bash
+railway variables set 'BACKEND_CORS_ORIGINS=["https://tu-url.vercel.app"]'
+railway up
+```
 
 ### Error: "Build failed" en Vercel
 
+**Causa:** Error de compilación de TypeScript o Vite
+
 **Solución:**
-1. Verificar que `frontend/package.json` tiene `"build": "tsc && vite build"`
-2. Logs de Vercel para ver error específico
-3. Probar build local: `cd frontend && pnpm build`
+```bash
+# Probar build localmente
+cd frontend
+pnpm build
+
+# Ver error específico
+# Fix el error
+# Deploy de nuevo
+vercel --prod
+```
+
+### Error: "Cannot connect to database"
+
+**Causa:** PostgreSQL no está iniciado o URL incorrecta
+
+**Solución Railway:**
+```bash
+railway status  # Ver si PostgreSQL está running
+railway restart  # Reiniciar servicios
+```
 
 ---
 
-## Costos Estimados
+## Costos Mensuales
 
-| Servicio | Plan | Costo Mensual |
-|----------|------|---------------|
+| Servicio | Plan | Costo |
+|----------|------|-------|
 | Railway | Hobby | $5 USD |
 | Vercel | Hobby | $0 USD (gratis) |
 | Cloudinary | Free Tier | $0 USD |
@@ -254,18 +406,56 @@ Vercel Dashboard → Deployments → [Deployment] → Runtime Logs
 
 ---
 
-## Checklist de Deployment
+## Checklist Pre-Deployment
 
-- [ ] Cuenta en Railway creada
-- [ ] Cuenta en Vercel creada
-- [ ] Cuenta en Cloudinary creada
-- [ ] PostgreSQL agregado en Railway
+Antes de cada deployment, verifica:
+
+- [ ] Tests de backend pasan: `cd backend && ./test.sh`
+- [ ] Tests de frontend pasan: `cd frontend && ./test.sh`
 - [ ] Variables de entorno configuradas en Railway
 - [ ] Variables de entorno configuradas en Vercel
-- [ ] Migraciones ejecutadas en producción
-- [ ] Seed data insertado
-- [ ] GitHub Secrets configurados
-- [ ] Health check del backend responde
+- [ ] Migraciones de BD aplicadas (si hay nuevas)
+- [ ] `.env` locales NO están en Git
+- [ ] Commit y push a GitHub
+
+---
+
+## Checklist Post-Deployment
+
+Después de cada deployment, verifica:
+
+- [ ] Health check responde: `/health` retorna 200
 - [ ] Frontend carga correctamente
-- [ ] API calls desde frontend funcionan
-- [ ] Logs de errores monitoreados
+- [ ] API calls funcionan (DevTools → Network)
+- [ ] Login funciona
+- [ ] No hay errores en logs: `railway logs` y `vercel logs`
+- [ ] Base de datos accesible desde backend
+
+---
+
+## Comandos Útiles
+```bash
+# Railway
+railway status          # Ver estado de servicios
+railway logs            # Ver logs en tiempo real
+railway logs --tail 100 # Ver últimas 100 líneas
+railway variables       # Listar variables de entorno
+railway run <cmd>       # Ejecutar comando en Railway
+railway connect         # Abrir shell interactivo
+
+# Vercel
+vercel ls               # Listar deployments
+vercel logs             # Ver logs
+vercel env ls           # Listar variables de entorno
+vercel inspect <url>    # Inspeccionar deployment
+vercel --prod           # Deploy a producción
+vercel --debug          # Deploy con debug activado
+```
+
+---
+
+## Recursos
+
+- **Railway Docs:** https://docs.railway.app
+- **Vercel Docs:** https://vercel.com/docs
+- **Alembic Docs:** https://alembic.sqlalchemy.org

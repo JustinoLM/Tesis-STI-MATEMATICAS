@@ -1,25 +1,23 @@
 """
 Entry point principal de la aplicación FastAPI.
-
-Este módulo inicializa la aplicación FastAPI, configura middleware,
-registra routers y define endpoints de health check.
 """
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
+from app.api.routers import auth, problems
 
 # Crear instancia de FastAPI
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="API REST del Sistema de Tutoría Inteligente",
     version="0.1.0",
-    docs_url="/docs",  # Swagger UI
-    redoc_url="/redoc",  # ReDoc
+    docs_url="/docs",
+    redoc_url="/redoc",
 )
 
-# Configurar CORS para permitir requests desde el frontend
+# Configurar CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.BACKEND_CORS_ORIGINS,
@@ -28,8 +26,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Registrar routers
+app.include_router(auth.router, prefix="/api/auth", tags=["Autenticación"])
+app.include_router(problems.router, prefix="/api/problems", tags=["Problemas"])
 
-# Health check endpoint
+
+# Health check endpoints
 @app.get("/", tags=["Health"])
 async def root():
     """Endpoint básico de health check."""
@@ -42,26 +44,25 @@ async def root():
 
 @app.get("/health", tags=["Health"])
 async def health_check():
-    """Endpoint detallado de health check para monitoring."""
+    """Endpoint detallado de health check."""
     return {
         "status": "healthy",
         "database": "connected",
-        "llm": "available",
+        "environment": settings.ENVIRONMENT,
     }
-
-
-# TODO: Registrar routers cuando los creemos
-# from app.api.routers import auth, students, teachers, problems, practices
-# app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
-# app.include_router(students.router, prefix="/api/students", tags=["Students"])
 
 
 # Event handlers
 @app.on_event("startup")
 async def startup_event():
     """Ejecutado al iniciar la aplicación."""
-    print("🚀 Iniciando STI Backend...")
-    print(f"📝 Documentación: http://localhost:8000/docs")
+    print("=" * 60)
+    print("🚀 INICIANDO STI BACKEND")
+    print("=" * 60)
+    print(f"Environment: {settings.ENVIRONMENT}")
+    print(f"Debug: {settings.DEBUG}")
+    print(f"API Docs: http://localhost:8000/docs")
+    print("=" * 60)
 
 
 @app.on_event("shutdown")

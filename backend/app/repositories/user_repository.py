@@ -1,0 +1,161 @@
+"""
+Repository para operaciones de base de datos de usuarios.
+
+Autenticación basada en códigos únicos (codigo_estudiante, codigo_profesor).
+"""
+
+from typing import Optional
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
+
+from app.models.user import Usuario, Estudiante, Profesor, TipoUsuario
+
+
+class UserRepository:
+    """Repository para operaciones CRUD de usuarios."""
+    
+    def __init__(self, db: AsyncSession):
+        self.db = db
+    
+    async def get_by_codigo(self, codigo: str) -> Optional[Usuario]:
+        """
+        Busca un usuario por su código (estudiante o profesor).
+        
+        Args:
+            codigo: Código de estudiante o profesor
+            
+        Returns:
+            Usuario si existe, None si no existe
+        """
+        # Intentar buscar como estudiante
+        result = await self.db.execute(
+            select(Estudiante).where(Estudiante.codigo_estudiante == codigo)
+        )
+        estudiante = result.scalar_one_or_none()
+        if estudiante:
+            return estudiante
+        
+        # Intentar buscar como profesor
+        result = await self.db.execute(
+            select(Profesor).where(Profesor.codigo_profesor == codigo)
+        )
+        return result.scalar_one_or_none()
+    
+    async def get_by_id(self, user_id: int) -> Optional[Usuario]:
+        """Busca un usuario por ID."""
+        result = await self.db.execute(
+            select(Usuario).where(Usuario.id == user_id)
+        )
+        return result.scalar_one_or_none()
+    
+    async def get_student_by_codigo(self, codigo: str) -> Optional[Estudiante]:
+        """Busca un estudiante específicamente por código."""
+        result = await self.db.execute(
+            select(Estudiante).where(Estudiante.codigo_estudiante == codigo)
+        )
+        return result.scalar_one_or_none()
+    
+    async def get_teacher_by_codigo(self, codigo: str) -> Optional[Profesor]:
+        """Busca un profesor específicamente por código."""
+        result = await self.db.execute(
+            select(Profesor).where(Profesor.codigo_profesor == codigo)
+        )
+        return result.scalar_one_or_none()
+    
+    async def create_student(
+        self,
+        codigo_estudiante: str,
+        password_hash: str,
+        nombre_completo: str,
+        email: Optional[str] = None
+    ) -> Estudiante:
+        """
+        Crea un nuevo estudiante.
+        
+        Returns:
+            Estudiante creado con ID asignado por la BD
+        """
+        estudiante = Estudiante(
+            codigo_estudiante=codigo_estudiante,
+            password_hash=password_hash,
+            tipo_usuario=TipoUsuario.ESTUDIANTE,
+            nombre_completo=nombre_completo,
+            email=email,
+            activo=True
+        )
+        
+        self.db.add(estudiante)
+        await self.db.commit()  # COMMIT en vez de flush
+        await self.db.refresh(estudiante)
+        
+        return estudiante
+    
+    async def create_teacher(
+        self,
+        codigo_profesor: str,
+        password_hash: str,
+        nombre_completo: str,
+        institucion: Optional[str] = None,
+        email: Optional[str] = None
+    ) -> Profesor:
+        """Crea un nuevo profesor."""
+        profesor = Profesor(
+            codigo_profesor=codigo_profesor,
+            password_hash=password_hash,
+            tipo_usuario=TipoUsuario.PROFESOR,
+            nombre_completo=nombre_completo,
+            institucion=institucion,
+            email=email,
+            activo=True
+        )
+        
+        self.db.add(profesor)
+        await self.db.commit()  # COMMIT en vez de flush
+        await self.db.refresh(profesor)
+        
+        return profesor
+    
+    async def update_last_access(self, user_id: int) -> None:
+        """Actualiza timestamp de último acceso."""
+        from datetime import datetime
+        
+        user = await self.get_by_id(user_id)
+        if user:
+            user.ultimo_acceso = datetime.utcnow()
+            await self.db.commit()  # COMMIT
+    
+    async def update_password(self, user_id: int, new_password_hash: str) -> None:
+        """Actualiza la contraseña de un usuario."""
+        user = await self.get_by_id(user_id)
+        if user:
+            user.password_hash = new_password_hash
+            await self.db.commit()  # COMMIT
+    
+    async def deactivate_user(self, user_id: int) -> None:
+        """Desactiva un usuario (soft delete)."""
+        user = await self.get_by_id(user_id)
+        if user:
+            user.activo = False
+            await self.db.commit()  # COMMIT
+    
+    async def activate_user(self, user_id: int) -> None:
+        """Activa un usuario."""
+        user = await self.get_by_id(user_id)
+        if user:
+            user.activo = True
+            await self.db.commit()  # COMMIT
+    
+    async def codigo_estudiante_exists(self, codigo: str) -> bool:
+        """Verifica si un código de estudiante ya existe."""
+        result = await self.db.execute(
+            select(Estudiante).where(Estudiante.codigo_estudiante == codigo)
+        )
+        return result.scalar_one_or_none() is not None
+    
+    async def codigo_profesor_exists(self, codigo: str) -> bool:
+        """Verifica si un código de profesor ya existe."""
+        result = await self.db.execute(
+            select(Profesor).where(Profesor.codigo_profesor == codigo)
+        )
+        return result.scalar_one_or_none() is not None

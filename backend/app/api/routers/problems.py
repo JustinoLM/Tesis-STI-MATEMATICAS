@@ -1,73 +1,100 @@
 """
 Router de problemas matemáticos.
 
-Endpoints para generación de problemas y solicitud de pistas.
+Endpoints:
+- POST /generate - Generar problemas aleatorios
+- POST /submit - Enviar respuesta
+- GET /{id} - Obtener problema por ID
+- POST /validate - Validar respuesta sin registrar intento
 """
 
 from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_db
-from app.api.routers.auth import oauth2_scheme
+from app.api.dependencies import (
+    CurrentStudent,
+    ProblemServiceDep
+)
+from app.schemas.problem import (
+    ProblemaGenerate,
+    ProblemaDisplay,
+    ProblemaResponse,
+    SubmitAnswerRequest,
+    IntentoResponse,
+    ValidateAnswerResponse
+)
+from decimal import Decimal
 
 router = APIRouter()
 
 
-@router.post("/generate")
-async def generate_problem(
-    token: str = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_db)
+@router.post("/generate", response_model=list[ProblemaDisplay])
+async def generate_problems(
+    request: ProblemaGenerate,
+    problem_service: ProblemServiceDep,
+    current_student: CurrentStudent
 ):
     """
-    Genera un problema matemático adaptado al nivel del estudiante.
+    Genera problemas matemáticos aleatorios.
     
-    Body:
-        level: int (1-5)
-        operation: str (addition, subtraction, multiplication, division)
-        with_decimals: bool
-        narrative_context: str (opcional)
+    Parámetros:
+    - **nivel_dificultad**: 1-5 (obligatorio)
+    - **operaciones_permitidas**: Lista de operaciones ["+", "-", "×", "÷"] (opcional)
+    - **decimales_maximos**: 0-3 (opcional)
+    - **rango_min/max**: Rango de números (opcional)
+    - **cantidad**: Cantidad de problemas (1-50, default: 10)
     
-    Returns:
-        Problema con enunciado, respuesta correcta y distractores
+    Retorna lista de problemas sin mostrar el resultado.
     """
-    return {
-        "message": "Generate problem - TODO",
-        "example": {
-            "problem_id": "uuid-prob-123",
-            "statement": "Un astronauta necesita 3.5 litros de agua...",
-            "operation": "addition",
-            "level": 3,
-            "correct_answer": "7.25"
-        }
-    }
+    return await problem_service.generate_problems(request)
 
 
-@router.post("/{problem_id}/hint")
-async def request_hint(
-    problem_id: str,
-    token: str = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_db)
+@router.post("/submit", response_model=IntentoResponse)
+async def submit_answer(
+    request: SubmitAnswerRequest,
+    current_student: CurrentStudent,
+    problem_service: ProblemServiceDep
 ):
     """
-    Solicita una pista para un problema específico.
+    Envía una respuesta a un problema y la valida.
     
-    Genera guión pedagógico con LLM y video con Manim (asíncrono).
+    Registra el intento en la base de datos y retorna:
+    - Si la respuesta es correcta o incorrecta
+    - La respuesta correcta
+    - Información del problema
     """
-    return {
-        "message": "Request hint - TODO",
-        "example": {
-            "hint_text": "Paso 1: Identifica los números decimales...",
-            "video_url": None,
-            "video_status": "processing"
-        }
-    }
+    return await problem_service.submit_answer(
+        estudiante_id=current_student.id,
+        request=request
+    )
 
 
-@router.get("/{problem_id}")
+@router.post("/validate", response_model=ValidateAnswerResponse)
+async def validate_answer(
+    problema_id: int,
+    respuesta: Decimal,
+    problem_service: ProblemServiceDep,
+    current_student: CurrentStudent
+):
+    """
+    Valida una respuesta sin registrar el intento.
+    
+    Útil para feedback inmediato durante la práctica.
+    """
+    return await problem_service.validate_answer(
+        problema_id=problema_id,
+        respuesta_estudiante=respuesta
+    )
+
+
+@router.get("/{problema_id}", response_model=ProblemaResponse)
 async def get_problem(
-    problem_id: str,
-    token: str = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_db)
+    problema_id: int,
+    problem_service: ProblemServiceDep,
+    current_student: CurrentStudent
 ):
-    """Obtiene un problema específico por ID."""
-    return {"message": f"Get problem {problem_id} - TODO"}
+    """
+    Obtiene un problema específico por ID.
+    
+    **Incluye el resultado** (para revisión después del intento).
+    """
+    return await problem_service.get_problem_by_id(problema_id)

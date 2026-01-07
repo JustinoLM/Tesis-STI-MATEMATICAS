@@ -1,92 +1,152 @@
 """
 Router de autenticación.
 
-Endpoints para login, registro y gestión de tokens.
+Endpoints:
+- POST /login - Login con código + password
+- POST /admin/students - Crear estudiante (solo admin por ahora)
+- POST /admin/teachers - Crear profesor (solo admin por ahora)
+- GET /me - Obtener usuario actual
+- POST /change-password - Cambiar contraseña
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends, status
+from fastapi.security import OAuth2PasswordRequestForm
 
-from app.core.database import get_db
+from app.api.dependencies import (
+    get_current_active_user,
+    get_current_student,
+    get_current_teacher,
+    AuthServiceDep,
+    CurrentUser,
+    CurrentStudent,
+    CurrentTeacher
+)
+from app.schemas.auth import (
+    LoginRequest,
+    CreateStudentRequest,
+    CreateTeacherRequest,
+    TokenResponse,
+    StudentResponse,
+    TeacherResponse,
+    ChangePasswordRequest,
+    MessageResponse,
+    UserBase
+)
 
 router = APIRouter()
 
-# OAuth2 scheme para extraer token de headers
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
-
-@router.post("/register", status_code=status.HTTP_201_CREATED)
-async def register(
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Registra un nuevo usuario (estudiante o profesor).
-    
-    TODO: Implementar lógica de registro
-    1. Verificar que email no exista
-    2. Hashear contraseña
-    3. Crear usuario en BD
-    4. Generar token JWT
-    5. Retornar usuario + token
-    """
-    return {
-        "message": "Register endpoint - TODO: Implementar",
-        "info": "Este endpoint creará usuarios y retornará JWT token"
-    }
-
-
-@router.post("/login")
+@router.post("/login", response_model=TokenResponse)
 async def login(
-    form_data: OAuth2PasswordRequestForm = Depends(),
-    db: AsyncSession = Depends(get_db)
+    login_data: LoginRequest,
+    auth_service: AuthServiceDep
 ):
     """
-    Autentica un usuario y retorna JWT token.
+    Login con código único + password.
     
-    TODO: Implementar lógica de login
-    1. Buscar usuario por email
-    2. Verificar contraseña
-    3. Generar token JWT con user_id y role
-    4. Retornar token
+    - **codigo**: Código de estudiante (ej: EST2024001) o profesor (ej: PROF001)
+    - **password**: Contraseña del usuario
+    
+    Retorna token JWT + información básica del usuario.
     """
-    return {
-        "message": "Login endpoint - TODO: Implementar",
-        "expected_response": {
-            "access_token": "eyJ0eXAiOiJKV1QiLCJhbGc...",
-            "token_type": "bearer"
-        }
-    }
+    return await auth_service.login(
+        codigo=login_data.codigo,
+        password=login_data.password
+    )
 
 
-@router.get("/me")
-async def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_db)
+@router.get("/me", response_model=UserBase)
+async def get_current_user_info(
+    current_user: CurrentUser
 ):
     """
     Obtiene información del usuario autenticado actual.
     
-    TODO: Implementar obtención de usuario actual
-    1. Decodificar token JWT
-    2. Extraer user_id del payload
-    3. Buscar usuario en BD
-    4. Retornar datos del usuario
+    Requiere token JWT válido en header Authorization.
     """
-    return {
-        "message": "Get current user endpoint - TODO: Implementar"
-    }
+    return UserBase.model_validate(current_user)
 
 
-@router.post("/refresh")
-async def refresh_token(
-    token: str = Depends(oauth2_scheme),
+@router.get("/me/student", response_model=StudentResponse)
+async def get_current_student_info(
+    current_student: CurrentStudent
 ):
     """
-    Refresca un JWT token existente.
+    Obtiene información completa del estudiante autenticado.
     
-    TODO: Implementar refresh de token
+    Solo accesible por estudiantes.
     """
-    return {
-        "message": "Refresh token endpoint - TODO: Implementar"
-    }
+    return StudentResponse.model_validate(current_student)
+
+
+@router.get("/me/teacher", response_model=TeacherResponse)
+async def get_current_teacher_info(
+    current_teacher: CurrentTeacher
+):
+    """
+    Obtiene información completa del profesor autenticado.
+    
+    Solo accesible por profesores.
+    """
+    return TeacherResponse.model_validate(current_teacher)
+
+
+@router.post("/change-password", response_model=MessageResponse)
+async def change_password(
+    password_data: ChangePasswordRequest,
+    current_user: CurrentUser,
+    auth_service: AuthServiceDep
+):
+    """
+    Cambia la contraseña del usuario actual.
+    
+    Requiere:
+    - **password_actual**: Contraseña actual (para verificación)
+    - **password_nueva**: Nueva contraseña
+    """
+    await auth_service.change_password(
+        user_id=current_user.id,
+        current_password=password_data.password_actual,
+        new_password=password_data.password_nueva
+    )
+    
+    return MessageResponse(message="Contraseña actualizada exitosamente")
+
+
+# ============================================
+# Endpoints de Administración
+# ============================================
+# NOTA: Por ahora sin protección de admin.
+# En producción, agregar dependency que verifique rol de admin.
+
+@router.post("/admin/students", response_model=StudentResponse, status_code=status.HTTP_201_CREATED)
+async def create_student(
+    student_data: CreateStudentRequest,
+    auth_service: AuthServiceDep
+):
+    """
+    Crea un nuevo estudiante.
+    
+    **NOTA:** En producción, este endpoint debe estar protegido por rol de administrador.
+    Por ahora está abierto para facilitar testing y desarrollo.
+    
+    El admin proporciona:
+    - Código único del estudiante
+    - Nombre completo
+    - Contraseña temporal (el estudiante puede cambiarla después)
+    """
+    return await auth_service.create_student(student_data)
+
+
+@router.post("/admin/teachers", response_model=TeacherResponse, status_code=status.HTTP_201_CREATED)
+async def create_teacher(
+    teacher_data: CreateTeacherRequest,
+    auth_service: AuthServiceDep
+):
+    """
+    Crea un nuevo profesor.
+    
+    **NOTA:** En producción, este endpoint debe estar protegido por rol de administrador.
+    Por ahora está abierto para facilitar testing y desarrollo.
+    """
+    return await auth_service.create_teacher(teacher_data)

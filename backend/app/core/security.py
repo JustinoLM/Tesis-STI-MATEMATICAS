@@ -1,7 +1,7 @@
 """
 Utilidades de seguridad para autenticación y autorización.
 
-Maneja hashing de contraseñas, generación y validación de JWT tokens.
+Maneja hashing de contraseñas con Argon2 y generación/validación de JWT tokens.
 """
 
 from datetime import datetime, timedelta
@@ -12,8 +12,9 @@ from passlib.context import CryptContext
 
 from app.core.config import settings
 
-# Contexto para hashing de contraseñas con bcrypt
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Contexto para hashing de contraseñas con Argon2
+# Argon2 es más seguro que bcrypt y no tiene límite de 72 bytes
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -22,7 +23,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def get_password_hash(password: str) -> str:
-    """Genera hash de una contraseña usando bcrypt."""
+    """Genera hash de una contraseña usando Argon2."""
     return pwd_context.hash(password)
 
 

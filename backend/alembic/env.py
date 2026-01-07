@@ -4,6 +4,13 @@ Script de entorno de Alembic.
 Este archivo configura cómo Alembic detecta cambios en los modelos
 y genera/aplica migraciones.
 """
+from dotenv import load_dotenv
+load_dotenv(override=True)
+
+
+import os
+print("DATABASE_URL =", os.getenv("DATABASE_URL"))
+
 
 from logging.config import fileConfig
 import sys

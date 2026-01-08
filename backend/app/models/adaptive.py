@@ -241,6 +241,10 @@ class SesionPractica(Base):
     
     # Cambios de nivel post-sesión
     cambios_nivel = Column(JSON, nullable=True)
+    
+    # Gamificación
+    puntos_ganados = Column(Integer, default=0)
+    desglose_puntos = Column(JSON, nullable=True)  # Detalle de cómo se calcularon los puntos
     # Ejemplo: {"suma": {"antes": 2, "despues": 3, "razon": "10 consecutivos"}}
     
     # ML predictions (para futuro análisis)

@@ -13,6 +13,10 @@ from app.services.problem_service import ProblemService
 from app.services.adaptive_service import AdaptiveService
 from app.repositories.practice_repository import PracticeRepository
 from app.services.practice_service import PracticeService
+from app.repositories.gamification_repository import GamificationRepository
+from app.services.gamification_service import GamificationService
+
+
 
 """
 Dependencies de FastAPI para inyección de dependencias.
@@ -215,3 +219,26 @@ async def get_practice_service(
 
 # Type alias para PracticeService
 PracticeServiceDep = Annotated[PracticeService, Depends(get_practice_service)]
+
+
+# ============================================
+# Dependencies de Gamification Service
+# ============================================
+
+async def get_gamification_repository(
+    db: AsyncSession = Depends(get_db)
+) -> GamificationRepository:
+    """Dependency para obtener GamificationRepository."""
+    return GamificationRepository(db)
+
+
+async def get_gamification_service(
+    gamification_repo: GamificationRepository = Depends(get_gamification_repository),
+    adaptive_repo: AdaptiveRepository = Depends(get_adaptive_repository)
+) -> GamificationService:
+    """Dependency para obtener GamificationService."""
+    return GamificationService(gamification_repo, adaptive_repo)
+
+
+# Type alias para GamificationService
+GamificationServiceDep = Annotated[GamificationService, Depends(get_gamification_service)]

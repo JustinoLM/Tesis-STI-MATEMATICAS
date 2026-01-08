@@ -257,3 +257,40 @@ class AdaptiveRepository:
             .order_by(AlertaEstudiante.fecha_creacion.desc())
         )
         return list(result.scalars().all())
+    
+    async def count_sesiones_en_rango(
+        self,
+        estudiante_id: int,
+        fecha_inicio: datetime,
+        fecha_fin: datetime
+    ) -> int:
+        """Cuenta sesiones en un rango de fechas."""
+        from sqlalchemy import func, and_
+        
+        result = await self.db.execute(
+            select(func.count(SesionPractica.id))
+            .where(
+                and_(
+                    SesionPractica.estudiante_id == estudiante_id,
+                    SesionPractica.fecha_inicio >= fecha_inicio,
+                    SesionPractica.fecha_inicio < fecha_fin,
+                    SesionPractica.estado == EstadoSesion.COMPLETADA
+                )
+            )
+        )
+        return result.scalar() or 0
+    
+    async def get_total_problemas_resueltos(self, estudiante_id: int) -> int:
+        """Total de problemas resueltos (todas las sesiones completadas)."""
+        from sqlalchemy import func, and_
+        
+        result = await self.db.execute(
+            select(func.sum(SesionPractica.cantidad_problemas))
+            .where(
+                and_(
+                    SesionPractica.estudiante_id == estudiante_id,
+                    SesionPractica.estado == EstadoSesion.COMPLETADA
+                )
+            )
+        )
+        return result.scalar() or 0

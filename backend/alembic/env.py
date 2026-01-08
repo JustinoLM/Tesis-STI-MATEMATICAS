@@ -27,9 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 # Importar configuración y modelos
 from app.core.config import settings
 from app.core.database import Base
-
-# Importar TODOS los modelos para que Alembic los detecte
-from app.models import Base
+import app.models  
 
 # this is the Alembic Config object
 config = context.config

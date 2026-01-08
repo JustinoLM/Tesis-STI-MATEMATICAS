@@ -1,90 +1,90 @@
 """
 Módulo de modelos SQLAlchemy.
 
-Importa todos los modelos para que Alembic pueda detectarlos.
+Centraliza todos los modelos para facilitar importaciones.
 """
 
-from app.core.database import Base
-
-# Modelos de usuarios
-from app.models.user import Usuario, Estudiante, Profesor, TipoUsuario
-
-# Modelos de problemas y prácticas
-from app.models.problem import (
-    Problema,
-    Intento,
-    ConfiguracionPractica,
-    Operacion,
-    TipoSesion
+# User and authentication models
+from app.models.user import (
+    TipoUsuario,
+    Usuario,
+    Estudiante,
+    Profesor,
 )
 
-# Modelos de sistema adaptativo
+# Problem models
+from app.models.problem import (
+    Operacion,
+    Problema,
+    Intento,
+)
+
+# Adaptive learning models
 from app.models.adaptive import (
+    PerfilAprendizaje,
+    EstadoDiagnostico,
+    TipoAlerta,
     PerfilEstudiante,
     PruebaDiagnostica,
     SesionPractica,
+    EstadoSesion,
     AlertaEstudiante,
     EstadisticaEstudiante,
-    PerfilAprendizaje,
-    TipoAlerta,
-    EstadoDiagnostico
 )
 
-# Modelos de contenido educativo
-from app.models.narrative import Narrativa
-from app.models.group import Grupo, EstudianteGrupo
-from app.models.gamification import Medalla, EstudianteMedalla
-from app.models.error import ErrorComun
+# Gamification models
+from app.models.gamification import (
+    CategoriaDesbloqueable,
+    CategoriaMedalla,
+    TipoTransaccion,
+    Desbloqueable,
+    EstudianteDesbloqueable,
+    PersonalizacionEstudiante,
+    Medalla,
+    EstudianteMedalla,
+    TransaccionPuntos,
+)
 
-# Importar todos los demás modelos necesarios para Alembic
-try:
-    from app.models.unlockable import (
-        Desbloqueable,
-        CategoriaDesbloqueable,
-        EstudianteDesbloqueable,
-        PersonalizacionEstudiante,
-        TipoCategoria
-    )
-except ImportError:
-    pass
+# Group models
+from app.models.group import (
+    Grupo,
+)
 
-try:
-    from app.models.challenge import (
-        DesafioGrupal,
-        DesafioIndividual,
-        ParticipacionDesafio
-    )
-except ImportError:
-    pass
-
-try:
-    from app.models.hint import VideoPista, VideoGuardado
-except ImportError:
-    pass
+# Challenge models (if needed later)
+# from app.models.challenge import (
+#     Challenge,
+# )
 
 __all__ = [
-    "Base",
-    "Usuario",
-    "Estudiante", 
-    "Profesor",
+    # User
     "TipoUsuario",
+    "Usuario",
+    "Estudiante",
+    "Profesor",
+    # Problem
+    "Operacion",
     "Problema",
     "Intento",
-    "ConfiguracionPractica",
-    "Operacion",
-    "TipoSesion",
+    # Adaptive
+    "PerfilAprendizaje",
+    "EstadoDiagnostico",
+    "TipoAlerta",
     "PerfilEstudiante",
     "PruebaDiagnostica",
     "SesionPractica",
+    "EstadoSesion",
     "AlertaEstudiante",
     "EstadisticaEstudiante",
-    "PerfilAprendizaje",
-    "TipoAlerta",
-    "EstadoDiagnostico",
-    "Narrativa",
-    "Grupo",
-    "EstudianteGrupo",
+    # Gamification
+    "CategoriaDesbloqueable",
+    "CategoriaMedalla",
+    "TipoTransaccion",
+    "Desbloqueable",
+    "EstudianteDesbloqueable",
+    "PersonalizacionEstudiante",
     "Medalla",
     "EstudianteMedalla",
-    "ErrorComun",
+    "TransaccionPuntos",
+    # Group
+    "Grupo",
 ]

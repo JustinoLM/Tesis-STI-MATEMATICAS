@@ -1,0 +1,259 @@
+"""
+Repository para operaciones de base de datos del sistema adaptativo.
+
+Gestiona perfiles, diagnósticos, sesiones y alertas.
+"""
+
+from typing import Optional, List, Dict
+from sqlalchemy import select, func, and_, or_, desc
+from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime, timedelta
+
+from app.models.adaptive import (
+    PerfilEstudiante,
+    PruebaDiagnostica,
+    SesionPractica,
+    AlertaEstudiante,
+    EstadoDiagnostico,
+    TipoAlerta,
+    PerfilAprendizaje
+)
+from app.models.problem import Intento
+
+
+class AdaptiveRepository:
+    """Repository para operaciones del sistema adaptativo."""
+    
+    def __init__(self, db: AsyncSession):
+        self.db = db
+    
+    # ============================================
+    # Operaciones de Perfil
+    # ============================================
+    
+    async def get_perfil(self, estudiante_id: int) -> Optional[PerfilEstudiante]:
+        """Obtiene el perfil de un estudiante."""
+        result = await self.db.execute(
+            select(PerfilEstudiante).where(PerfilEstudiante.estudiante_id == estudiante_id)
+        )
+        return result.scalar_one_or_none()
+    
+    async def create_perfil(self, estudiante_id: int) -> PerfilEstudiante:
+        """Crea un perfil nuevo con valores por defecto."""
+        perfil = PerfilEstudiante(
+            estudiante_id=estudiante_id,
+            nivel_suma=1,
+            nivel_resta=1,
+            nivel_multiplicacion=1,
+            nivel_division=1,
+            nivel_actual=1
+        )
+        
+        self.db.add(perfil)
+        await self.db.commit()
+        await self.db.refresh(perfil)
+        
+        return perfil
+    
+    async def update_perfil(self, perfil: PerfilEstudiante) -> PerfilEstudiante:
+        """Actualiza un perfil existente."""
+        perfil.fecha_actualizacion = datetime.utcnow()
+        await self.db.commit()
+        await self.db.refresh(perfil)
+        return perfil
+    
+    async def get_or_create_perfil(self, estudiante_id: int) -> PerfilEstudiante:
+        """Obtiene perfil o lo crea si no existe."""
+        perfil = await self.get_perfil(estudiante_id)
+        if not perfil:
+            perfil = await self.create_perfil(estudiante_id)
+        return perfil
+    
+    # ============================================
+    # Operaciones de Diagnóstico
+    # ============================================
+    
+    async def create_diagnostico(self, estudiante_id: int, problemas_ids: List[int]) -> PruebaDiagnostica:
+        """Crea una prueba diagnóstica."""
+        diagnostico = PruebaDiagnostica(
+            estudiante_id=estudiante_id,
+            estado=EstadoDiagnostico.EN_PROGRESO,
+            fecha_inicio=datetime.utcnow(),
+            problemas_ids=problemas_ids
+        )
+        
+        self.db.add(diagnostico)
+        await self.db.commit()
+        await self.db.refresh(diagnostico)
+        
+        return diagnostico
+    
+    async def get_diagnostico(self, diagnostico_id: int) -> Optional[PruebaDiagnostica]:
+        """Obtiene un diagnóstico por ID."""
+        result = await self.db.execute(
+            select(PruebaDiagnostica).where(PruebaDiagnostica.id == diagnostico_id)
+        )
+        return result.scalar_one_or_none()
+    
+    async def get_diagnostico_by_estudiante(self, estudiante_id: int) -> Optional[PruebaDiagnostica]:
+        """Obtiene el diagnóstico de un estudiante."""
+        result = await self.db.execute(
+            select(PruebaDiagnostica)
+            .where(PruebaDiagnostica.estudiante_id == estudiante_id)
+            .order_by(PruebaDiagnostica.fecha_inicio.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+    
+    async def update_diagnostico(self, diagnostico: PruebaDiagnostica) -> PruebaDiagnostica:
+        """Actualiza un diagnóstico."""
+        await self.db.commit()
+        await self.db.refresh(diagnostico)
+        return diagnostico
+    
+    # ============================================
+    # Operaciones de Sesión
+    # ============================================
+    
+    async def create_sesion(
+        self,
+        estudiante_id: int,
+        perfil: PerfilEstudiante,
+        cantidad_problemas: int,
+        problemas_ids: List[int],
+        operaciones_incluidas: Dict[str, int],
+        ratio_dificultad: Dict[str, float]
+    ) -> SesionPractica:
+        """Crea una nueva sesión de práctica."""
+        sesion = SesionPractica(
+            estudiante_id=estudiante_id,
+            perfil_id=perfil.estudiante_id,
+            nivel_actual_inicio=perfil.nivel_actual,
+            nivel_suma_inicio=perfil.nivel_suma,
+            nivel_resta_inicio=perfil.nivel_resta,
+            nivel_multiplicacion_inicio=perfil.nivel_multiplicacion,
+            nivel_division_inicio=perfil.nivel_division,
+            cantidad_problemas=cantidad_problemas,
+            problemas_ids=problemas_ids,
+            operaciones_incluidas=operaciones_incluidas,
+            ratio_dificultad=ratio_dificultad
+        )
+        
+        self.db.add(sesion)
+        await self.db.commit()
+        await self.db.refresh(sesion)
+        
+        return sesion
+    
+    async def get_sesion(self, sesion_id: int) -> Optional[SesionPractica]:
+        """Obtiene una sesión por ID."""
+        result = await self.db.execute(
+            select(SesionPractica).where(SesionPractica.id == sesion_id)
+        )
+        return result.scalar_one_or_none()
+    
+    async def update_sesion(self, sesion: SesionPractica) -> SesionPractica:
+        """Actualiza una sesión."""
+        await self.db.commit()
+        await self.db.refresh(sesion)
+        return sesion
+    
+    async def get_ultimas_sesiones(
+        self,
+        estudiante_id: int,
+        limit: int = 10
+    ) -> List[SesionPractica]:
+        """Obtiene las últimas N sesiones de un estudiante."""
+        result = await self.db.execute(
+            select(SesionPractica)
+            .where(SesionPractica.estudiante_id == estudiante_id)
+            .order_by(SesionPractica.fecha_inicio.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+    
+    # ============================================
+    # Operaciones de Intentos (extendidas)
+    # ============================================
+    
+    async def get_intentos_sesion(self, sesion_id: int) -> List[Intento]:
+        """Obtiene todos los intentos de una sesión."""
+        result = await self.db.execute(
+            select(Intento)
+            .where(Intento.sesion_id == sesion_id)
+            .order_by(Intento.timestamp.asc())
+        )
+        return list(result.scalars().all())
+    
+    async def get_ultimos_intentos(
+        self,
+        estudiante_id: int,
+        limit: int = 15
+    ) -> List[Intento]:
+        """Obtiene los últimos N intentos de un estudiante."""
+        result = await self.db.execute(
+            select(Intento)
+            .where(Intento.estudiante_id == estudiante_id)
+            .order_by(Intento.timestamp.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+    
+    # ============================================
+    # Estadísticas de Grupo
+    # ============================================
+    
+    async def get_velocidades_grupo(self, grupo_id: int) -> List[float]:
+        """Obtiene velocidades promedio de todos los estudiantes del grupo."""
+        # TODO: Implementar cuando tengamos la relación estudiante-grupo
+        # Por ahora retorna lista vacía
+        return []
+    
+    async def get_precisiones_grupo(self, grupo_id: int) -> List[float]:
+        """Obtiene precisiones de todos los estudiantes del grupo."""
+        # TODO: Implementar cuando tengamos la relación estudiante-grupo
+        return []
+    
+    # ============================================
+    # Operaciones de Alertas (preparado para futuro)
+    # ============================================
+    
+    async def create_alerta(
+        self,
+        estudiante_id: int,
+        tipo: TipoAlerta,
+        titulo: str,
+        mensaje: str,
+        severidad: str = "info",
+        datos_contexto: Optional[Dict] = None
+    ) -> AlertaEstudiante:
+        """Crea una nueva alerta."""
+        alerta = AlertaEstudiante(
+            estudiante_id=estudiante_id,
+            perfil_id=estudiante_id,
+            tipo=tipo,
+            severidad=severidad,
+            titulo=titulo,
+            mensaje=mensaje,
+            datos_contexto=datos_contexto
+        )
+        
+        self.db.add(alerta)
+        await self.db.commit()
+        await self.db.refresh(alerta)
+        
+        return alerta
+    
+    async def get_alertas_activas(self, estudiante_id: int) -> List[AlertaEstudiante]:
+        """Obtiene alertas activas de un estudiante."""
+        result = await self.db.execute(
+            select(AlertaEstudiante)
+            .where(
+                and_(
+                    AlertaEstudiante.estudiante_id == estudiante_id,
+                    AlertaEstudiante.activa == True
+                )
+            )
+            .order_by(AlertaEstudiante.fecha_creacion.desc())
+        )
+        return list(result.scalars().all())

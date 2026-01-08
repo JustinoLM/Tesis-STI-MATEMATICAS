@@ -1,3 +1,16 @@
+from typing import Annotated
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database import get_db
+from app.repositories.user_repository import UserRepository
+from app.services.auth_service import AuthService
+from app.models.user import Usuario, Estudiante, Profesor, TipoUsuario
+from app.repositories.adaptive_repository import AdaptiveRepository
+from app.repositories.problem_repository import ProblemRepository
+from app.services.problem_service import ProblemService
+from app.services.adaptive_service import AdaptiveService
 """
 Dependencies de FastAPI para inyección de dependencias.
 
@@ -149,3 +162,29 @@ async def get_problem_service(
 
 # Type alias para ProblemService
 ProblemServiceDep = Annotated[ProblemService, Depends(get_problem_service)]
+
+
+# ============================================
+# Dependencies de Adaptive Service
+# ============================================
+
+async def get_adaptive_repository(
+    db: AsyncSession = Depends(get_db)
+) -> AdaptiveRepository:
+    """Dependency para obtener AdaptiveRepository."""
+    from app.repositories.adaptive_repository import AdaptiveRepository
+    return AdaptiveRepository(db)
+
+
+async def get_adaptive_service(
+    adaptive_repo: AdaptiveRepository = Depends(get_adaptive_repository),
+    problem_repo: ProblemRepository = Depends(get_problem_repository),
+    problem_service: ProblemService = Depends(get_problem_service)
+) -> AdaptiveService:
+    """Dependency para obtener AdaptiveService."""
+    from app.services.adaptive_service import AdaptiveService
+    return AdaptiveService(adaptive_repo, problem_repo, problem_service)
+
+
+# Type alias para AdaptiveService
+AdaptiveServiceDep = Annotated[AdaptiveService, Depends(get_adaptive_service)]

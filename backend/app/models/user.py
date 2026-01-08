@@ -66,6 +66,10 @@ class Estudiante(Usuario):
     intentos = relationship("Intento", back_populates="estudiante")
     estadisticas = relationship("EstadisticaEstudiante", back_populates="estudiante")
     medallas = relationship("EstudianteMedalla", back_populates="estudiante")
+    perfil = relationship("PerfilEstudiante", back_populates="estudiante", uselist=False)
+    diagnostico = relationship("PruebaDiagnostica", back_populates="estudiante", uselist=False)
+    sesiones = relationship("SesionPractica", back_populates="estudiante")
+    alertas = relationship("AlertaEstudiante", back_populates="estudiante")
     
     # Configuración de herencia
     __mapper_args__ = {

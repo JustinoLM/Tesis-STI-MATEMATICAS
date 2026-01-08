@@ -29,18 +29,7 @@ from app.core.config import settings
 from app.core.database import Base
 
 # Importar TODOS los modelos para que Alembic los detecte
-from app.models import (
-    Usuario, Estudiante, Profesor,
-    Narrativa,
-    Grupo, EstudianteGrupo,
-    Problema, ConfiguracionPractica, Intento,
-    PerfilEstudiante, EstadisticaEstudiante,
-    Medalla, EstudianteMedalla,
-    CategoriaDesbloqueable, Desbloqueable, EstudianteDesbloqueable, PersonalizacionEstudiante,
-    DesafioGrupal, GrupoDesafio, DesafioIndividual, EstudianteDesafioIndividual,
-    ErrorComun, EstudianteError,
-    VideoPista, VideoGuardado,
-)
+from app.models import Base
 
 # this is the Alembic Config object
 config = context.config

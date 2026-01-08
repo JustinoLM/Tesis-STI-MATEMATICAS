@@ -111,10 +111,13 @@ class Intento(Base):
     solicito_pista = Column(Boolean, default=False, nullable=False)
     tipo_sesion = Column(Enum(TipoSesion), nullable=False, index=True)
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    sesion_id = Column(Integer, ForeignKey("sesion_practica.id"), nullable=True)
     
     # Relaciones
     estudiante = relationship("Estudiante", back_populates="intentos")
     problema = relationship("Problema", back_populates="intentos")
+    sesion = relationship("SesionPractica", back_populates="intentos")
+
     
     def __repr__(self):
         return f"<Intento(id={self.id}, estudiante_id={self.estudiante_id}, correcto={self.es_correcto})>"

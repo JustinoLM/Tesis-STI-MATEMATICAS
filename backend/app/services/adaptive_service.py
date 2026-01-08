@@ -808,11 +808,19 @@ class AdaptiveService:
         Recalcula nivel_actual basado en operaciones practicables.
         
         El nivel_actual es un PISO que casi nunca baja.
+        
+        REGLA ESPECIAL NIVEL 5: Para alcanzar nivel 5, TODAS las operaciones
+        disponibles deben estar en nivel 4 o superior.
         """
         ops_disponibles = self._get_operaciones_disponibles(perfil)
         niveles_practicables = [self._get_nivel_operacion(perfil, op) for op in ops_disponibles]
         
         nivel_calculado = max(niveles_practicables) if niveles_practicables else 1
+        
+        # REGLA ESPECIAL: Para nivel 5, TODAS las operaciones deben estar en 4+
+        if nivel_calculado >= 5:
+            if not all(nivel >= 4 for nivel in niveles_practicables):
+                nivel_calculado = 4  # Limitar a nivel 4 hasta que todas suban
         
         # El nivel_actual solo SUBE o se mantiene
         if nivel_calculado > perfil.nivel_actual:

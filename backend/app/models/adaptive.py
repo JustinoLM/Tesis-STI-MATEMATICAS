@@ -186,11 +186,21 @@ class PruebaDiagnostica(Base):
         return f"<PruebaDiagnostica(estudiante_id={self.estudiante_id}, estado={self.estado})>"
 
 
+class EstadoSesion(str, enum.Enum):
+    """Estados posibles de una sesión de práctica."""
+    INICIADA = "iniciada"
+    EN_PROGRESO = "en_progreso"
+    PAUSADA = "pausada"
+    COMPLETADA = "completada"
+    ABANDONADA = "abandonada"
+
+
 class SesionPractica(Base):
     """
     Sesión completa de práctica (10, 15 o 20 problemas).
     
     Trackea configuración, resultados y cambios de nivel.
+    Soporta pausar/reanudar con timeout de 4 horas.
     """
     __tablename__ = "sesion_practica"
     
@@ -198,9 +208,14 @@ class SesionPractica(Base):
     estudiante_id = Column(Integer, ForeignKey("estudiante.id"), nullable=False)
     perfil_id = Column(Integer, ForeignKey("perfil_estudiante.estudiante_id"), nullable=False)
     
+    # Estado de la sesión
+    estado = Column(Enum(EstadoSesion), default=EstadoSesion.INICIADA, nullable=False)
+    progreso_actual = Column(Integer, default=0)  # Índice del problema actual (0-based)
+    
     # Timestamps
     fecha_inicio = Column(DateTime, default=datetime.utcnow)
     fecha_fin = Column(DateTime, nullable=True)
+    fecha_ultima_actividad = Column(DateTime, default=datetime.utcnow)
     
     # Estado al inicio (snapshot)
     nivel_actual_inicio = Column(Integer)

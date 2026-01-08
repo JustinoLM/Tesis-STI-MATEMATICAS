@@ -11,6 +11,9 @@ from app.repositories.adaptive_repository import AdaptiveRepository
 from app.repositories.problem_repository import ProblemRepository
 from app.services.problem_service import ProblemService
 from app.services.adaptive_service import AdaptiveService
+from app.repositories.practice_repository import PracticeRepository
+from app.services.practice_service import PracticeService
+
 """
 Dependencies de FastAPI para inyección de dependencias.
 
@@ -188,3 +191,27 @@ async def get_adaptive_service(
 
 # Type alias para AdaptiveService
 AdaptiveServiceDep = Annotated[AdaptiveService, Depends(get_adaptive_service)]
+
+
+# ============================================
+# Dependencies de Practice Service
+# ============================================
+
+async def get_practice_repository(
+    db: AsyncSession = Depends(get_db)
+) -> PracticeRepository:
+    """Dependency para obtener PracticeRepository."""
+    return PracticeRepository(db)
+
+
+async def get_practice_service(
+    practice_repo: PracticeRepository = Depends(get_practice_repository),
+    adaptive_repo: AdaptiveRepository = Depends(get_adaptive_repository),
+    problem_repo: ProblemRepository = Depends(get_problem_repository)
+) -> PracticeService:
+    """Dependency para obtener PracticeService."""
+    return PracticeService(practice_repo, adaptive_repo, problem_repo)
+
+
+# Type alias para PracticeService
+PracticeServiceDep = Annotated[PracticeService, Depends(get_practice_service)]

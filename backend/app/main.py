@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.api.routers import auth, problems, adaptive
+from app.api.routers import auth, problems, adaptive, practices
 
 # Crear instancia de FastAPI
 app = FastAPI(
@@ -30,6 +30,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/auth", tags=["Autenticación"])
 app.include_router(problems.router, prefix="/api/problems", tags=["Problemas"])
 app.include_router(adaptive.router, prefix="/api/adaptive", tags=["Sistema Adaptativo"])
+app.include_router(practices.router, prefix="/api/practices", tags=["Prácticas e Intentos"])
 
 
 # Health check endpoints

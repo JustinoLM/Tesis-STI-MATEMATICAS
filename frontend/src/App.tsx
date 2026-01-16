@@ -1,52 +1,159 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+/**
+ * Componente raíz de la aplicación con sistema de rutas.
+ */
 
-// TODO: Importar páginas cuando estén creadas
-// import Login from '@pages/auth/Login'
-// import StudentDashboard from '@pages/student/Dashboard'
-// import TeacherDashboard from '@pages/teacher/Dashboard'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useState } from 'react';
+
+// Layout
+import { MainLayout } from '@/components/layout/MainLayout';
+import { ProtectedRoute } from '@/components/routing/ProtectedRoute';
+
+// Auth
+import { LoginPage } from '@/pages/auth/LoginPage';
+
+// Student
+import { StudentDashboard } from '@/pages/student/StudentDashboard';
+import { PracticePage } from '@/pages/student/PracticePage';
+import { ShopPage } from '@/pages/student/ShopPage';
+import { ProfilePage } from '@/pages/student/ProfilePage';
+
+// Teacher
+import { TeacherDashboard } from '@/pages/teacher/TeacherDashboard';
+import { GroupsPage } from '@/pages/teacher/GroupsPage';
+import { ChallengesPage } from '@/pages/teacher/ChallengesPage';
+import { ConfigurationPage } from '@/pages/teacher/ConfigurationPage';
+
+import { TipoUsuario } from '@/types';
 
 function App() {
+  // TODO: Reemplazar con Zustand store en 4.4.3
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userRole, setUserRole] = useState<TipoUsuario | undefined>();
+  const [userName, setUserName] = useState('');
+
+  const handleLogin = async (codigo: string, password: string) => {
+    // TODO: Implementar autenticación real en 4.4.3
+    console.log('Login:', codigo, password);
+    
+    // Mock login
+    setIsAuthenticated(true);
+    setUserRole(codigo.startsWith('EST') ? 'estudiante' : 'profesor');
+    setUserName(codigo);
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setUserRole(undefined);
+    setUserName('');
+  };
+
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={
-          <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-8">
-            <div className="max-w-2xl bg-white rounded-2xl shadow-xl p-12 text-center">
-              <h1 className="text-5xl font-bold text-gray-800 mb-4">
-                Sistema de Tutoría Inteligente
-              </h1>
-              <p className="text-xl text-gray-600 mb-8">
-                Frontend en construcción...
-              </p>
-              <div className="space-y-3 text-left">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">✅</span>
-                  <span className="text-gray-700">Estructura del proyecto creada</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">🎨</span>
-                  <span className="text-gray-700">TailwindCSS configurado</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">⚛️</span>
-                  <span className="text-gray-700">React + TypeScript listo</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">🚀</span>
-                  <span className="text-gray-700">Próximos pasos: Crear componentes y páginas</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        } />
-        
-        {/* TODO: Descomentar cuando las páginas estén listas */}
-        {/* <Route path="/login" element={<Login />} />
-        <Route path="/student/*" element={<StudentDashboard />} />
-        <Route path="/teacher/*" element={<TeacherDashboard />} /> */}
+        {/* Ruta pública: Login */}
+        <Route
+          path="/login"
+          element={
+            isAuthenticated ? (
+              <Navigate
+                to={userRole === 'estudiante' ? '/student/dashboard' : '/teacher/dashboard'}
+                replace
+              />
+            ) : (
+              <LoginPage onLogin={handleLogin} />
+            )
+          }
+        />
+
+        {/* Rutas protegidas: Estudiante */}
+        <Route
+          path="/student/*"
+          element={
+            <ProtectedRoute
+              isAuthenticated={isAuthenticated}
+              userRole={userRole}
+              requiredRole="estudiante"
+            >
+              <MainLayout
+                userName={userName}
+                userRole="estudiante"
+                onLogout={handleLogout}
+              >
+                <Routes>
+                  <Route path="dashboard" element={<StudentDashboard />} />
+                  <Route path="practice" element={<PracticePage />} />
+                  <Route path="shop" element={<ShopPage />} />
+                  <Route path="profile" element={<ProfilePage />} />
+                  <Route path="*" element={<Navigate to="/student/dashboard" replace />} />
+                </Routes>
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Rutas protegidas: Profesor */}
+        <Route
+          path="/teacher/*"
+          element={
+            <ProtectedRoute
+              isAuthenticated={isAuthenticated}
+              userRole={userRole}
+              requiredRole="profesor"
+            >
+              <MainLayout
+                userName={userName}
+                userRole="profesor"
+                onLogout={handleLogout}
+              >
+                <Routes>
+                  <Route path="dashboard" element={<TeacherDashboard />} />
+                  <Route path="groups" element={<GroupsPage />} />
+                  <Route path="challenges" element={<ChallengesPage />} />
+                  <Route path="configuration" element={<ConfigurationPage />} />
+                  <Route path="*" element={<Navigate to="/teacher/dashboard" replace />} />
+                </Routes>
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Raíz: Redirect según autenticación */}
+        <Route
+          path="/"
+          element={
+            <Navigate
+              to={
+                isAuthenticated
+                  ? userRole === 'estudiante'
+                    ? '/student/dashboard'
+                    : '/teacher/dashboard'
+                  : '/login'
+              }
+              replace
+            />
+          }
+        />
+
+        {/* 404: Redirect a login o dashboard */}
+        <Route
+          path="*"
+          element={
+            <Navigate
+              to={
+                isAuthenticated
+                  ? userRole === 'estudiante'
+                    ? '/student/dashboard'
+                    : '/teacher/dashboard'
+                  : '/login'
+              }
+              replace
+            />
+          }
+        />
       </Routes>
     </BrowserRouter>
-  )
+  );
 }
 
-export default App
+export default App;

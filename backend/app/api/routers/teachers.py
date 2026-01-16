@@ -1,70 +1,198 @@
-"""
-Router de profesores.
+"""Router de profesores - APIs completas."""
 
-Endpoints para gestión de grupos, configuración de prácticas y monitoreo.
-"""
-
-from fastapi import APIRouter, Depends
+from typing import List
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.api.routers.auth import oauth2_scheme
+from app.api.dependencies import get_current_teacher
+from app.models.user import Profesor
+from app.services.teacher_service import TeacherService
+from app.schemas.teacher import (
+    GrupoCreate, GrupoUpdate, GrupoDetalle, GrupoResumen,
+    ConfiguracionPracticaCreate, ConfiguracionPracticaResponse,
+    DesafioGrupalCreate, DesafioGrupalDetalle, DesafioGrupalResumen,
+    EstadisticasGrupo, ProgresoEstudiante, AlertaEstudianteResponse,
+    BuscarEstudianteRequest, EstudianteSearchResult
+)
 
 router = APIRouter()
 
 
-@router.get("/groups")
-async def get_teacher_groups(
-    token: str = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_db)
+async def get_teacher_service(db: AsyncSession = Depends(get_db)) -> TeacherService:
+    """Dependency para TeacherService."""
+    return TeacherService(db)
+
+
+# ==================== GRUPOS ====================
+
+@router.post("/groups", response_model=GrupoDetalle, status_code=status.HTTP_201_CREATED)
+async def crear_grupo(
+    data: GrupoCreate,
+    profesor: Profesor = Depends(get_current_teacher),
+    service: TeacherService = Depends(get_teacher_service)
 ):
-    """Obtiene grupos asignados al profesor."""
-    return {"message": "Get groups - TODO"}
+    """Crea un nuevo grupo."""
+    return await service.crear_grupo(profesor.id, data)
 
 
-@router.get("/groups/{group_id}/students")
-async def get_group_students(
-    group_id: str,
-    token: str = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_db)
+@router.get("/groups", response_model=List[GrupoResumen])
+async def listar_grupos(
+    profesor: Profesor = Depends(get_current_teacher),
+    service: TeacherService = Depends(get_teacher_service)
 ):
-    """Obtiene estudiantes de un grupo."""
-    return {"message": f"Get students from group {group_id} - TODO"}
+    """Lista grupos del profesor con resumen."""
+    return await service.get_grupos(profesor.id)
 
 
-@router.get("/groups/{group_id}/progress")
-async def get_group_progress(
-    group_id: str,
-    token: str = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_db)
+@router.get("/groups/{group_id}", response_model=GrupoDetalle)
+async def obtener_grupo(
+    group_id: int,
+    profesor: Profesor = Depends(get_current_teacher),
+    service: TeacherService = Depends(get_teacher_service)
 ):
-    """Obtiene progreso agregado del grupo."""
-    return {"message": f"Get progress from group {group_id} - TODO"}
+    """Obtiene detalle de un grupo."""
+    grupo = await service.get_grupo_detalle(group_id, profesor.id)
+    if not grupo:
+        raise HTTPException(status_code=404, detail="Grupo no encontrado")
+    return grupo
 
 
-@router.post("/groups/{group_id}/practice-config")
-async def update_practice_config(
-    group_id: str,
-    token: str = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_db)
+@router.post("/groups/{group_id}/students/{student_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def agregar_estudiante(
+    group_id: int,
+    student_id: int,
+    profesor: Profesor = Depends(get_current_teacher),
+    service: TeacherService = Depends(get_teacher_service)
 ):
-    """Actualiza configuración de prácticas del grupo."""
-    return {"message": f"Update config for group {group_id} - TODO"}
+    """Agrega estudiante a grupo."""
+    try:
+        await service.agregar_estudiante(group_id, student_id, profesor.id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
-@router.post("/challenges")
-async def create_challenge(
-    token: str = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_db)
+@router.delete("/groups/{group_id}/students/{student_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remover_estudiante(
+    group_id: int,
+    student_id: int,
+    profesor: Profesor = Depends(get_current_teacher),
+    service: TeacherService = Depends(get_teacher_service)
 ):
-    """Crea un desafío grupal o individual."""
-    return {"message": "Create challenge - TODO"}
+    """Remueve estudiante de grupo."""
+    try:
+        await service.remover_estudiante(group_id, student_id, profesor.id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
-@router.get("/ai-suggestions")
-async def get_ai_suggestions(
-    token: str = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_db)
+# ==================== CONFIGURACIÓN ====================
+
+@router.post("/configuration", response_model=ConfiguracionPracticaResponse, status_code=status.HTTP_201_CREATED)
+async def crear_configuracion(
+    data: ConfiguracionPracticaCreate,
+    profesor: Profesor = Depends(get_current_teacher),
+    service: TeacherService = Depends(get_teacher_service)
 ):
-    """Obtiene sugerencias generadas por IA basadas en análisis grupal."""
-    return {"message": "AI suggestions - TODO"}
+    """Crea configuración de práctica para un grupo."""
+    try:
+        return await service.crear_configuracion(profesor.id, data)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/groups/{group_id}/configuration", response_model=ConfiguracionPracticaResponse)
+async def obtener_configuracion(
+    group_id: int,
+    profesor: Profesor = Depends(get_current_teacher),
+    service: TeacherService = Depends(get_teacher_service)
+):
+    """Obtiene configuración activa de un grupo."""
+    config = await service.get_configuracion_activa(group_id, profesor.id)
+    if not config:
+        raise HTTPException(status_code=404, detail="Configuración no encontrada")
+    return config
+
+
+# ==================== DESAFÍOS GRUPALES ====================
+
+@router.post("/challenges", response_model=DesafioGrupalDetalle, status_code=status.HTTP_201_CREATED)
+async def crear_desafio(
+    data: DesafioGrupalCreate,
+    profesor: Profesor = Depends(get_current_teacher),
+    service: TeacherService = Depends(get_teacher_service)
+):
+    """Crea desafío grupal."""
+    return await service.crear_desafio_grupal(profesor.id, data)
+
+
+@router.get("/challenges", response_model=List[DesafioGrupalDetalle])
+async def listar_desafios(
+    profesor: Profesor = Depends(get_current_teacher),
+    service: TeacherService = Depends(get_teacher_service)
+):
+    """Lista desafíos del profesor."""
+    return await service.get_desafios(profesor.id)
+
+
+@router.delete("/challenges/{challenge_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def eliminar_desafio(
+    challenge_id: int,
+    profesor: Profesor = Depends(get_current_teacher),
+    service: TeacherService = Depends(get_teacher_service)
+):
+    """Elimina desafío (soft delete)."""
+    try:
+        await service.eliminar_desafio(challenge_id, profesor.id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+# ==================== MONITOREO ====================
+
+@router.get("/groups/{group_id}/statistics", response_model=EstadisticasGrupo)
+async def obtener_estadisticas(
+    group_id: int,
+    profesor: Profesor = Depends(get_current_teacher),
+    service: TeacherService = Depends(get_teacher_service)
+):
+    """Obtiene estadísticas del grupo."""
+    stats = await service.get_estadisticas_grupo(group_id, profesor.id)
+    if not stats:
+        raise HTTPException(status_code=404, detail="Grupo no encontrado")
+    return stats
+
+
+@router.get("/alerts", response_model=List[AlertaEstudianteResponse])
+async def listar_alertas(
+    profesor: Profesor = Depends(get_current_teacher),
+    service: TeacherService = Depends(get_teacher_service)
+):
+    """Lista alertas activas de todos los grupos."""
+    return await service.get_alertas(profesor.id)
+
+
+# ==================== BÚSQUEDA ====================
+
+@router.post("/students/search", response_model=List[EstudianteSearchResult])
+async def buscar_estudiantes(
+    request: BuscarEstudianteRequest,
+    profesor: Profesor = Depends(get_current_teacher),
+    service: TeacherService = Depends(get_teacher_service)
+):
+    """Busca estudiantes por nombre o código."""
+    # TODO: Implementar búsqueda
+    return []
+
+
+# ==================== REPORTES ====================
+
+@router.get("/groups/{group_id}/report")
+async def generar_reporte(
+    group_id: int,
+    profesor: Profesor = Depends(get_current_teacher),
+    service: TeacherService = Depends(get_teacher_service)
+):
+    """Genera reporte PDF del grupo."""
+    # TODO: Implementar generación de PDF
+    raise HTTPException(status_code=501, detail="No implementado")

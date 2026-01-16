@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     CLOUDINARY_API_KEY: str = ""
     CLOUDINARY_API_SECRET: str = ""
 
+    # Videos Configuration
+    VIDEO_TEMP_LIFETIME_HOURS: int = 24
+    MAX_VIDEOS_GUARDADOS: int = 10
+
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = [
         "http://localhost:5173",

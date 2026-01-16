@@ -15,6 +15,12 @@ from app.repositories.practice_repository import PracticeRepository
 from app.services.practice_service import PracticeService
 from app.repositories.gamification_repository import GamificationRepository
 from app.services.gamification_service import GamificationService
+from app.repositories.hints_videos_repository import HintsVideosRepository
+from app.services.ollama_service import OllamaService
+from app.services.hints_service import HintsService
+from app.services.enunciados_service import EnunciadosService
+from app.services.videos_service import VideosService
+from app.services.deteccion_errores_service import DeteccionErroresService
 
 
 
@@ -179,7 +185,6 @@ async def get_adaptive_repository(
     db: AsyncSession = Depends(get_db)
 ) -> AdaptiveRepository:
     """Dependency para obtener AdaptiveRepository."""
-    from app.repositories.adaptive_repository import AdaptiveRepository
     return AdaptiveRepository(db)
 
 
@@ -189,7 +194,6 @@ async def get_adaptive_service(
     problem_service: ProblemService = Depends(get_problem_service)
 ) -> AdaptiveService:
     """Dependency para obtener AdaptiveService."""
-    from app.services.adaptive_service import AdaptiveService
     return AdaptiveService(adaptive_repo, problem_repo, problem_service)
 
 
@@ -242,3 +246,57 @@ async def get_gamification_service(
 
 # Type alias para GamificationService
 GamificationServiceDep = Annotated[GamificationService, Depends(get_gamification_service)]
+
+
+# ============================================
+# Dependencies de Hints & Videos Services
+# ============================================
+
+async def get_hints_videos_repository(
+    db: AsyncSession = Depends(get_db)
+) -> HintsVideosRepository:
+    """Dependency para obtener HintsVideosRepository."""
+    return HintsVideosRepository(db)
+
+
+async def get_ollama_service() -> OllamaService:
+    """Dependency para obtener OllamaService."""
+    return OllamaService()
+
+
+async def get_hints_service(
+    hints_videos_repo: HintsVideosRepository = Depends(get_hints_videos_repository),
+    gamification_repo: GamificationRepository = Depends(get_gamification_repository),
+    adaptive_repo: AdaptiveRepository = Depends(get_adaptive_repository),
+    ollama_service: OllamaService = Depends(get_ollama_service)
+) -> HintsService:
+    """Dependency para obtener HintsService."""
+    return HintsService(hints_videos_repo, gamification_repo, adaptive_repo, ollama_service)
+
+
+async def get_enunciados_service(
+    hints_videos_repo: HintsVideosRepository = Depends(get_hints_videos_repository),
+    adaptive_repo: AdaptiveRepository = Depends(get_adaptive_repository),
+    ollama_service: OllamaService = Depends(get_ollama_service)
+) -> EnunciadosService:
+    """Dependency para obtener EnunciadosService."""
+    return EnunciadosService(hints_videos_repo, adaptive_repo, ollama_service)
+
+
+async def get_videos_service(
+    hints_videos_repo: HintsVideosRepository = Depends(get_hints_videos_repository)
+) -> VideosService:
+    """Dependency para obtener VideosService."""
+    return VideosService(hints_videos_repo)
+
+
+async def get_deteccion_errores_service() -> DeteccionErroresService:
+    """Dependency para obtener DeteccionErroresService."""
+    return DeteccionErroresService()
+
+
+# Type aliases
+HintsServiceDep = Annotated[HintsService, Depends(get_hints_service)]
+EnunciadosServiceDep = Annotated[EnunciadosService, Depends(get_enunciados_service)]
+VideosServiceDep = Annotated[VideosService, Depends(get_videos_service)]
+DeteccionErroresServiceDep = Annotated[DeteccionErroresService, Depends(get_deteccion_errores_service)]

@@ -50,6 +50,16 @@ from app.models.group import (
     Grupo,
 )
 
+# Narrative models
+from app.models.narrative import (
+    Narrativa,
+)
+
+# Practice Configuration models
+from app.models.practice_config import (
+    ConfiguracionPractica,
+)
+
 # Challenge models (if needed later)
 # from app.models.challenge import (
 #     Challenge,
@@ -87,4 +97,31 @@ __all__ = [
     "TransaccionPuntos",
     # Group
     "Grupo",
+    # Narrative
+    "Narrativa",
+    # Practice Configuration
+    "ConfiguracionPractica",
+    # Hints and Videos
+    "NivelPista",
+    "TipoError",
+    "FuenteVideo",
+    "PistaGenerica",
+    "UsoPista",
+    "VideoEducativo",
+    "VideoGuardado",
+    "VideoTemporal",
+    "GeneracionLLM",
 ]
+
+# Hints and Videos models
+from app.models.hints_videos import (
+    NivelPista,
+    TipoError,
+    FuenteVideo,
+    PistaGenerica,
+    UsoPista,
+    VideoEducativo,
+    VideoGuardado,
+    VideoTemporal,
+    GeneracionLLM,
+)

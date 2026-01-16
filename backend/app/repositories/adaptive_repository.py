@@ -18,7 +18,7 @@ from app.models.adaptive import (
     TipoAlerta,
     PerfilAprendizaje
 )
-from app.models.problem import Intento
+from app.models.problem import Intento, Problema
 
 
 class AdaptiveRepository:
@@ -294,3 +294,34 @@ class AdaptiveRepository:
             )
         )
         return result.scalar() or 0
+    
+    async def get_problema(self, problema_id: int) -> Optional[Problema]:
+        """Obtiene un problema por ID."""
+        result = await self.db.execute(
+            select(Problema).where(Problema.id == problema_id)
+        )
+        return result.scalar_one_or_none()
+    
+    async def update_problema(self, problema: Problema) -> Problema:
+        """Actualiza un problema."""
+        await self.db.commit()
+        await self.db.refresh(problema)
+        return problema
+    
+    async def get_intentos_problema(
+        self,
+        estudiante_id: int,
+        problema_id: int
+    ) -> List[Intento]:
+        """Obtiene todos los intentos de un estudiante en un problema."""
+        result = await self.db.execute(
+            select(Intento)
+            .where(
+                and_(
+                    Intento.estudiante_id == estudiante_id,
+                    Intento.problema_id == problema_id
+                )
+            )
+            .order_by(Intento.timestamp)
+        )
+        return list(result.scalars().all())

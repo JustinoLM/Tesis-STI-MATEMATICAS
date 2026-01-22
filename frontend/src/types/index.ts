@@ -5,6 +5,17 @@
 // ==================== AUTH ====================
 export type TipoUsuario = 'estudiante' | 'profesor';
 
+export interface LoginRequest {
+  codigo: string;
+  password: string;
+}
+
+export interface TokenResponse {
+  access_token: string;
+  token_type: string;
+  user: Estudiante | Profesor;
+}
+
 export interface Usuario {
   id: number;
   tipo_usuario: TipoUsuario;
@@ -88,6 +99,19 @@ export interface Intento {
   es_correcto: boolean;
   tiempo_resolucion: number;
   timestamp: string;
+}
+
+// Validación granular para feedback por pasos
+export interface RespuestaValidacion {
+  esCorrecta: boolean;
+  resultadoCorrecto: boolean;
+  pasosIntermediosCorrectos?: boolean;
+  detalles?: {
+    paso: string;
+    esperado: string;
+    recibido: string;
+    correcto: boolean;
+  }[];
 }
 
 // ==================== PRACTICE ====================
@@ -188,3 +212,22 @@ export interface VideoEducativo {
   url: string;
   thumbnail_url?: string;
 }
+
+// ==================== SHOP ====================
+// Re-exportar tipos de la tienda
+export type {
+  CategoriaDesbloqueable,
+  RarezaItem,
+  Desbloqueable as DesbloquableDetallado,
+} from './shop';
+
+export {
+  TEMAS,
+  FONDOS,
+  COLORES,
+  MUSICAS,
+  EFECTOS,
+  getTodosLosDesbloqueables,
+  getDesbloqueablesPorCategoria,
+  getDesbloquablesDisponibles,
+} from './shop';

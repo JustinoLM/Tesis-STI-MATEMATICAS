@@ -1,9 +1,5 @@
 /**
  * Cliente HTTP centralizado con Axios.
- * 
- * Configura interceptores para:
- * - Agregar token JWT automáticamente
- * - Manejo de errores global
  */
 
 import axios, { AxiosError } from 'axios';
@@ -23,9 +19,13 @@ const apiClient = axios.create({
 // Interceptor de request: Agregar token JWT
 apiClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('access_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    // Obtener token del localStorage (viene del authStore persist)
+    const authStorage = localStorage.getItem('auth-storage');
+    if (authStorage) {
+      const { token } = JSON.parse(authStorage).state;
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
     }
     return config;
   },
@@ -40,6 +40,8 @@ apiClient.interceptors.response.use(
   (error: AxiosError) => {
     // Token inválido o expirado
     if (error.response?.status === 401) {
+      // Limpiar auth storage
+      localStorage.removeItem('auth-storage');
       localStorage.removeItem('access_token');
       window.location.href = '/login';
     }

@@ -11,9 +11,10 @@ interface MainLayoutProps {
   userName: string;
   userRole: 'estudiante' | 'profesor';
   onLogout: () => void;
+  hideSidebar?: boolean; // Prop para ocultar sidebar (usado en página de práctica)
 }
 
-export function MainLayout({ children, userName, userRole, onLogout }: MainLayoutProps) {
+export function MainLayout({ children, userName, userRole, onLogout, hideSidebar = false }: MainLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
@@ -26,11 +27,13 @@ export function MainLayout({ children, userName, userRole, onLogout }: MainLayou
       />
 
       <div className="flex">
-        <Sidebar
-          userRole={userRole}
-          isOpen={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
-        />
+        {!hideSidebar && (
+          <Sidebar
+            userRole={userRole}
+            isOpen={sidebarOpen}
+            onClose={() => setSidebarOpen(false)}
+          />
+        )}
 
         <main className="flex-1 p-6">
           <div className="container mx-auto">

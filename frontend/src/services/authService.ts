@@ -1,64 +1,48 @@
 /**
  * Servicio de autenticación.
- * 
- * Maneja login, register, logout y gestión de tokens.
  */
 
-import apiClient from './api';
+import apiClient, { getErrorMessage } from './api';
+import { LoginRequest, TokenResponse } from '@/types';
 
 export const authService = {
   /**
-   * Inicia sesión con email y contraseña.
+   * Login con código y contraseña.
    */
-  async login(email: string, password: string) {
-    const formData = new FormData();
-    formData.append('username', email);
-    formData.append('password', password);
-    
-    const response = await apiClient.post('/auth/login', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-    
-    // Guardar token en localStorage
-    localStorage.setItem('access_token', response.data.access_token);
-    
-    return response.data;
+  async login(credentials: LoginRequest): Promise<TokenResponse> {
+    try {
+      const response = await apiClient.post<TokenResponse>('/auth/login', credentials);
+      
+      // Guardar token en localStorage
+      if (response.data.access_token) {
+        localStorage.setItem('access_token', response.data.access_token);
+      }
+      
+      return response.data;
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
   },
 
   /**
-   * Registra un nuevo usuario.
-   */
-  async register(data: any) {
-    const response = await apiClient.post('/auth/register', data);
-    
-    // Guardar token en localStorage
-    localStorage.setItem('access_token', response.data.access_token);
-    
-    return response.data;
-  },
-
-  /**
-   * Cierra sesión y limpia el token.
+   * Logout: limpiar token.
    */
   logout(): void {
     localStorage.removeItem('access_token');
-    window.location.href = '/login';
   },
 
   /**
-   * Obtiene información del usuario autenticado actual.
+   * Verificar si hay token válido.
    */
-  async getCurrentUser() {
-    const response = await apiClient.get('/auth/me');
-    return response.data;
+  hasValidToken(): boolean {
+    const token = localStorage.getItem('access_token');
+    return !!token;
   },
 
   /**
-   * Verifica si hay un token válido.
+   * Obtener token actual.
    */
-  isAuthenticated(): boolean {
-    return !!localStorage.getItem('access_token');
+  getToken(): string | null {
+    return localStorage.getItem('access_token');
   },
 };

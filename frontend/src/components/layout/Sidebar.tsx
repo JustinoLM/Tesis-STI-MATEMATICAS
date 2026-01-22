@@ -8,7 +8,9 @@ import {
   Home,
   BookOpen,
   ShoppingBag,
-  User,
+  Package,
+  Trophy,
+  TrendingUp,
   LayoutDashboard,
   Users,
   Target,
@@ -24,8 +26,10 @@ interface NavItem {
 const studentNav: NavItem[] = [
   { title: 'Inicio', href: '/student/dashboard', icon: Home },
   { title: 'Practicar', href: '/student/practice', icon: BookOpen },
+  { title: 'Inventario', href: '/student/inventory', icon: Package },
   { title: 'Tienda', href: '/student/shop', icon: ShoppingBag },
-  { title: 'Perfil', href: '/student/profile', icon: User },
+  { title: 'Medallero', href: '/student/badges', icon: Trophy },
+  { title: 'Progreso', href: '/student/progress', icon: TrendingUp },
 ];
 
 const teacherNav: NavItem[] = [

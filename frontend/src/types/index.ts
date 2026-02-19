@@ -161,9 +161,11 @@ export interface Grupo {
   nombre: string;
   codigo_grupo: string;
   activo: boolean;
+  profesor_id: number;
   cantidad_estudiantes: number;
   promedio_precision: number;
   problemas_resueltos_hoy: number;
+  estudiantes?: EstudianteEnGrupo[];
 }
 
 export interface EstudianteEnGrupo {
@@ -176,13 +178,34 @@ export interface EstudianteEnGrupo {
   activo: boolean;
 }
 
+export interface EstadisticasGrupo {
+  grupo_id: number;
+  nombre_grupo: string;
+  total_estudiantes: number;
+  estudiantes_activos: number;
+  estudiantes_inactivos: number;
+  promedio_precision: number;
+  promedio_velocidad: number;
+  problemas_resueltos_total: number;
+  problemas_resueltos_hoy: number;
+  distribucion_niveles: Record<number, number>;
+  estudiantes_rezagados: number;
+  estudiantes_estancados: number;
+  estudiantes_sobresalientes: number;
+}
+
 export interface DesafioGrupal {
   id: number;
+  profesor_id: number;
   nombre: string;
+  descripcion?: string;
   tipo: string;
   objetivo_cantidad: number;
+  recompensa_texto?: string;
+  fecha_creacion: string;
   fecha_limite?: string;
   completado: boolean;
+  eliminado: boolean;
   progreso_grupos: ProgresoGrupoDesafio[];
 }
 
@@ -193,6 +216,52 @@ export interface ProgresoGrupoDesafio {
   objetivo_cantidad: number;
   porcentaje: number;
   completado: boolean;
+}
+
+export interface ConfiguracionPractica {
+  id: number;
+  grupo_id: number;
+  operaciones_permitidas: string[];
+  niveles_permitidos: number[];
+  rango_min: number;
+  rango_max: number;
+  decimales_maximos: number;
+  pistas_habilitadas: Record<string, boolean>;
+  fecha_aplicacion: string;
+  activa: boolean;
+}
+
+export interface AlertaEstudianteDetalle extends AlertaEstudiante {
+  estudiante_id: number;
+  codigo_estudiante: string;
+  nombre_estudiante: string;
+  datos_contexto?: Record<string, any>;
+}
+
+export interface ProgresoEstudiante {
+  estudiante_id: number;
+  codigo_estudiante: string;
+  nombre_completo: string;
+  nivel_actual: number;
+  total_problemas_resueltos: number;
+  overall_accuracy: number;
+  current_streak: number;
+  max_streak: number;
+  operations?: {
+    operation: string;
+    current_level: number;
+    problems_solved: number;
+    accuracy: number;
+    progress_to_next_level: number;
+  }[];
+  recent_attempts?: {
+    id: number;
+    operation: string;
+    level: number;
+    is_correct: boolean;
+    time_taken: number;
+    created_at: string;
+  }[];
 }
 
 // ==================== HINTS & VIDEOS ====================

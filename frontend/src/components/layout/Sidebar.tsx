@@ -15,6 +15,8 @@ import {
   Users,
   Target,
   Settings,
+  AlertTriangle,
+  GraduationCap,
 } from 'lucide-react';
 
 interface NavItem {
@@ -35,7 +37,9 @@ const studentNav: NavItem[] = [
 const teacherNav: NavItem[] = [
   { title: 'Dashboard', href: '/teacher/dashboard', icon: LayoutDashboard },
   { title: 'Grupos', href: '/teacher/groups', icon: Users },
+  { title: 'Estudiantes', href: '/teacher/students', icon: GraduationCap },
   { title: 'Desafíos', href: '/teacher/challenges', icon: Target },
+  { title: 'Alertas', href: '/teacher/alerts', icon: AlertTriangle },
   { title: 'Configuración', href: '/teacher/configuration', icon: Settings },
 ];
 

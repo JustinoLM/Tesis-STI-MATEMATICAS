@@ -26,9 +26,14 @@ import { GroupChallengePage } from '@/pages/student/GroupChallengePage';
 import { SettingsPage } from '@/pages/student/SettingsPage';
 
 // Teacher
-import { TeacherDashboard } from '@/pages/teacher/TeacherDashboard';
-import { GroupsPage } from '@/pages/teacher/GroupsPage';
+import TeacherDashboard from '@/pages/teacher/TeacherDashboard';
+import GroupsPage from '@/pages/teacher/GroupsPage';
+import GroupDetailPage from '@/pages/teacher/GroupDetailPage';
+import StudentsPage from '@/pages/teacher/StudentsPage';
+import StudentDetailPage from '@/pages/teacher/StudentDetailPage';
+import AlertsPage from '@/pages/teacher/AlertsPage';
 import { ChallengesPage as TeacherChallengesPage } from '@/pages/teacher/ChallengesPage';
+import CreateChallengePage from '@/pages/teacher/CreateChallengePage';
 import { ConfigurationPage } from '@/pages/teacher/ConfigurationPage';
 
 function App() {
@@ -169,7 +174,12 @@ function App() {
                 <Routes>
                   <Route path="dashboard" element={<TeacherDashboard />} />
                   <Route path="groups" element={<GroupsPage />} />
+                  <Route path="groups/:id" element={<GroupDetailPage />} />
+                  <Route path="students" element={<StudentsPage />} />
+                  <Route path="students/:id" element={<StudentDetailPage />} />
                   <Route path="challenges" element={<TeacherChallengesPage />} />
+                  <Route path="challenges/new" element={<CreateChallengePage />} />
+                  <Route path="alerts" element={<AlertsPage />} />
                   <Route path="configuration" element={<ConfigurationPage />} />
                   <Route path="*" element={<Navigate to="/teacher/dashboard" replace />} />
                 </Routes>

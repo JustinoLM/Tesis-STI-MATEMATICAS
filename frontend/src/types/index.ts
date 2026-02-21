@@ -299,4 +299,6 @@ export {
   getTodosLosDesbloqueables,
   getDesbloqueablesPorCategoria,
   getDesbloquablesDisponibles,
+  getFondosPorTema,
+  getMusicasPorTema,
 } from './shop';

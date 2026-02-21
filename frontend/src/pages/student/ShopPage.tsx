@@ -15,20 +15,31 @@ import {
   Crown,
   Check,
   AlertCircle,
-  TrendingUp
+  TrendingUp,
+  Music2
 } from 'lucide-react';
 import {
   getTodosLosDesbloqueables,
   getDesbloqueablesPorCategoria,
+  getMusicasPorTema,
   type CategoriaDesbloqueable,
   type DesbloquableDetallado,
   type RarezaItem
 } from '@/types';
+import { useThemeStore } from '@/store/themeStore';
 
 export function ShopPage() {
   // TODO: Obtener del perfil del estudiante via React Query
   const [puntosDisponibles] = useState(1250);
   const [nivelEstudiante] = useState(3); // Nivel del sistema adaptativo
+
+  // Tema activo del estudiante — determina qué músicas se muestran en la tienda
+  const temaActivoId = useThemeStore(s => s.temaActivoId);
+  const getTemaActivo = useThemeStore(s => s.getTemaActivo);
+  const temaActivo = getTemaActivo();
+
+  // Músicas del tema activo del estudiante (3 por tipo)
+  const musicasDelTemaActivo = getMusicasPorTema(temaActivoId);
 
   const todosLosItems = getTodosLosDesbloqueables();
 
@@ -298,12 +309,179 @@ export function ShopPage() {
         {/* Tab: Música */}
         <TabsContent value="musica">
           <div className="space-y-4">
-            <div className="text-sm text-muted-foreground">
-              Música de fondo para mejorar tu concentración. <strong>Requiere nivel 3.</strong>
+            {/* Descripción contextual según el tema activo */}
+            <div className="flex items-start gap-3 rounded-lg border bg-muted/40 p-4">
+              <Music2 className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-gray-800">
+                  Música del tema{' '}
+                  <span className="text-primary">
+                    {temaActivo?.icono} {temaActivo?.nombre}
+                  </span>
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {temaActivoId === 'tema-default'
+                    ? 'El tema Clásico no incluye música. Desbloquea un tema narrativo para acceder a las canciones.'
+                    : 'Hay 3 tipos de música disponibles para tu tema. Cada uno se adapta a una forma diferente de estudiar.'}
+                </p>
+              </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {getItemsPorTab('musica').map(renderItem)}
-            </div>
+
+            {temaActivoId === 'tema-default' ? (
+              <Card className="border-dashed border-2 border-gray-200">
+                <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
+                  <span className="text-5xl">🎵</span>
+                  <p className="text-sm font-medium text-gray-600">
+                    Sin música disponible para el tema Clásico
+                  </p>
+                  <p className="text-xs text-muted-foreground max-w-xs">
+                    Ve a la pestaña <strong>Temas</strong> y desbloquea un tema narrativo
+                    (Piratas, Astronautas, Magos…) para acceder a sus 3 canciones.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              /* 3 slots fijos: tranquila, energética, ambiente */
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {(
+                  [
+                    {
+                      tipo: 'tranquila'  as const,
+                      etiqueta: 'Tranquila',
+                      subtitulo: 'Para concentrarse',
+                      emoji: '🎵',
+                      descripcionBase: 'Melodía suave que ayuda a mantener el foco durante los ejercicios.',
+                    },
+                    {
+                      tipo: 'energetica' as const,
+                      etiqueta: 'Energética',
+                      subtitulo: 'Para motivarse',
+                      emoji: '🎸',
+                      descripcionBase: 'Ritmo dinámico para mantener el ánimo en los momentos difíciles.',
+                    },
+                    {
+                      tipo: 'ambiente'   as const,
+                      etiqueta: 'Ambiente',
+                      subtitulo: 'Sonidos del mundo',
+                      emoji: '🌿',
+                      descripcionBase: 'Sonidos del entorno del tema para sentirte dentro de la aventura.',
+                    },
+                  ]
+                ).map(({ tipo, etiqueta, subtitulo, emoji, descripcionBase }) => {
+                  const musica = musicasDelTemaActivo.find(m => m.config?.musicaTipo === tipo);
+
+                  if (!musica) {
+                    // Slot vacío — no debería ocurrir si shop.ts está bien configurado
+                    return (
+                      <Card key={tipo} className="border-dashed opacity-50">
+                        <CardContent className="flex flex-col items-center gap-2 py-8 text-center">
+                          <span className="text-4xl">{emoji}</span>
+                          <p className="text-sm font-semibold text-gray-500">{etiqueta}</p>
+                          <p className="text-xs text-muted-foreground">No disponible</p>
+                        </CardContent>
+                      </Card>
+                    );
+                  }
+
+                  const puedeComprar = !musica.estaDesbloqueado &&
+                                       puntosDisponibles >= musica.precio &&
+                                       nivelEstudiante >= musica.nivelRequerido;
+                  const nivelBloqueado = nivelEstudiante < musica.nivelRequerido;
+                  const puntosBloqueado = puntosDisponibles < musica.precio;
+
+                  return (
+                    <Card
+                      key={tipo}
+                      className={`
+                        transition-all hover:shadow-lg
+                        ${musica.estaDesbloqueado ? 'border-green-300 bg-green-50/30' : ''}
+                        ${nivelBloqueado ? 'opacity-60' : ''}
+                      `}
+                    >
+                      <CardHeader>
+                        <div className="flex items-start justify-between mb-2">
+                          {/* Icono tipo + icono canción */}
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="text-4xl">{musica.icono}</span>
+                            <Badge variant="outline" className="text-xs">
+                              {etiqueta}
+                            </Badge>
+                          </div>
+
+                          <div className="flex flex-col gap-1 items-end">
+                            <Badge className={`${getRarezaColor(musica.rareza)} text-xs`}>
+                              {musica.rareza.toUpperCase()}
+                            </Badge>
+                            {musica.estaDesbloqueado && (
+                              <Badge className="bg-green-100 text-green-700 border-green-300 text-xs">
+                                <Check className="w-3 h-3 mr-1" />
+                                Desbloqueada
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Nombre específico de la canción */}
+                        <CardTitle className="text-base">{musica.nombre}</CardTitle>
+                        <p className="text-xs font-medium text-primary">{subtitulo}</p>
+                        <CardDescription className="text-xs mt-1">
+                          {musica.descripcion || descripcionBase}
+                        </CardDescription>
+
+                        {nivelBloqueado && (
+                          <div className="mt-2 flex items-center gap-1 text-xs text-red-600">
+                            <TrendingUp className="w-3 h-3" />
+                            <span>Requiere Nivel {musica.nivelRequerido} (tu nivel: {nivelEstudiante})</span>
+                          </div>
+                        )}
+                      </CardHeader>
+
+                      <CardContent>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className={`h-5 w-5 ${puntosBloqueado ? 'text-gray-400' : 'text-yellow-600'}`} />
+                            <span className={`font-bold text-xl ${puntosBloqueado ? 'text-gray-400' : 'text-gray-900'}`}>
+                              {musica.precio}
+                            </span>
+                            <span className="text-sm text-gray-500">pts</span>
+                          </div>
+
+                          {musica.estaDesbloqueado ? (
+                            <Button variant="outline" disabled size="sm">
+                              <Check className="h-4 w-4 mr-2" />
+                              Desbloqueada
+                            </Button>
+                          ) : nivelBloqueado ? (
+                            <Button variant="secondary" disabled size="sm">
+                              <Lock className="h-4 w-4 mr-2" />
+                              Nivel {musica.nivelRequerido}
+                            </Button>
+                          ) : (
+                            <Button
+                              onClick={() => handleComprar(musica)}
+                              disabled={!puedeComprar}
+                              size="sm"
+                            >
+                              {puntosBloqueado ? (
+                                <>
+                                  <Lock className="h-4 w-4 mr-2" />
+                                  {musica.precio - puntosDisponibles} pts faltantes
+                                </>
+                              ) : (
+                                <>
+                                  <ShoppingCart className="h-4 w-4 mr-2" />
+                                  Comprar
+                                </>
+                              )}
+                            </Button>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </TabsContent>
 

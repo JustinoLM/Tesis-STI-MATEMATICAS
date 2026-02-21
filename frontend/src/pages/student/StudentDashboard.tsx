@@ -4,6 +4,7 @@
 
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useThemeStore } from '@/store/themeStore';
 import {
   BookOpen,
   ShoppingBag,
@@ -16,6 +17,20 @@ import {
 
 export function StudentDashboard() {
   const navigate = useNavigate();
+  const { temaActivoId, colorActivoId } = useThemeStore();
+
+  // Genera el glow usando la variable --primary del tema activo.
+  // Se recalcula cada vez que cambia el tema o el color.
+  const cardGlow = {
+    boxShadow: '0 0 0 1px hsl(var(--primary) / 0.15), 0 4px 20px hsl(var(--primary) / 0.18)',
+  } as React.CSSProperties;
+
+  const cardGlowHover = {
+    boxShadow: '0 0 0 2px hsl(var(--primary) / 0.3), 0 8px 30px hsl(var(--primary) / 0.25)',
+  } as React.CSSProperties;
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  void temaActivoId; void colorActivoId; // asegurar re-render al cambiar tema
 
   // TODO: Obtener de React Query en subsección posterior
   const studentData = {
@@ -80,7 +95,7 @@ export function StudentDashboard() {
   return (
     <div className="space-y-6">
       {/* Header con texto motivacional */}
-      <Card className="bg-gradient-to-r from-blue-50 to-purple-50">
+      <Card className="bg-gradient-to-r from-blue-50 to-purple-50" style={cardGlow}>
         <CardContent className="pt-6">
           <div className="text-center">
             <p className="text-2xl font-medium text-gray-700">
@@ -113,7 +128,10 @@ export function StudentDashboard() {
             return (
               <Card
                 key={card.path}
-                className="cursor-pointer transition-all hover:scale-105 hover:shadow-lg"
+                className="cursor-pointer transition-all hover:scale-105"
+                style={cardGlow}
+                onMouseEnter={e => Object.assign((e.currentTarget as HTMLElement).style, cardGlowHover)}
+                onMouseLeave={e => Object.assign((e.currentTarget as HTMLElement).style, cardGlow)}
                 onClick={() => navigate(card.path)}
               >
                 <CardHeader>
@@ -136,7 +154,10 @@ export function StudentDashboard() {
 
         {/* Columna derecha: Card especial de Medallero (vertical, ocupa 2 filas) */}
         <Card
-          className="cursor-pointer transition-all hover:scale-105 hover:shadow-lg ring-2 ring-yellow-400 lg:row-span-2"
+          className="cursor-pointer transition-all hover:scale-105 ring-2 ring-yellow-400 lg:row-span-2"
+          style={cardGlow}
+          onMouseEnter={e => Object.assign((e.currentTarget as HTMLElement).style, cardGlowHover)}
+          onMouseLeave={e => Object.assign((e.currentTarget as HTMLElement).style, cardGlow)}
           onClick={() => navigate('/student/badges')}
         >
           <CardHeader>
@@ -177,6 +198,9 @@ export function StudentDashboard() {
             <Card
               key={action.path}
               className="cursor-pointer hover:bg-gray-50 transition-colors"
+              style={cardGlow}
+              onMouseEnter={e => Object.assign((e.currentTarget as HTMLElement).style, cardGlowHover)}
+              onMouseLeave={e => Object.assign((e.currentTarget as HTMLElement).style, cardGlow)}
               onClick={() => navigate(action.path)}
             >
               <CardContent className="pt-6">

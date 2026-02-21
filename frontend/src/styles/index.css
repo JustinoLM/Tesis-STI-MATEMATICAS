@@ -2,54 +2,65 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Variables CSS personalizables por narrativa */
-:root {
-  --color-primary: #3b82f6;     /* blue-500 por defecto */
-  --color-secondary: #8b5cf6;   /* violet-500 por defecto */
-  --color-accent: #f59e0b;      /* amber-500 por defecto */
+/* ================================================================
+   Variables CSS de tema narrativo (Sección 4.4.6)
+   Se aplican vía data-narrative en el <html> por el themeStore.
+   Tailwind usa hsl(var(--primary)) así que se sobreescriben aquí.
+   ================================================================ */
+
+/* Tema: Clásico (default — igual al shadcn base pero en azul) */
+[data-narrative="tema-default"] {
+  --primary: 217 91% 60%;          /* #3B82F6 blue-500 */
+  --primary-foreground: 0 0% 98%;
+  --ring: 217 91% 60%;
 }
 
-/* Narrativa: Piratas */
-[data-narrative="pirates"] {
-  --color-primary: #dc2626;     /* red-600 */
-  --color-secondary: #78350f;   /* brown-900 */
-  --color-accent: #fbbf24;      /* amber-400 */
+/* Tema: Piratas del Caribe Matemático */
+[data-narrative="tema-piratas"] {
+  --primary: 30 96% 31%;           /* #92400E amber-900 */
+  --primary-foreground: 0 0% 98%;
+  --ring: 30 96% 31%;
 }
 
-/* Narrativa: Astronautas */
-[data-narrative="astronauts"] {
-  --color-primary: #2563eb;     /* blue-600 */
-  --color-secondary: #7c3aed;   /* violet-600 */
-  --color-accent: #06b6d4;      /* cyan-500 */
+/* Tema: Astronautas de la Estación Decimal */
+[data-narrative="tema-astronautas"] {
+  --primary: 263 70% 50%;          /* #7C3AED violet-600 */
+  --primary-foreground: 0 0% 98%;
+  --ring: 263 70% 50%;
 }
 
-/* Narrativa: Magos */
-[data-narrative="magicians"] {
-  --color-primary: #7c3aed;     /* violet-600 */
-  --color-secondary: #db2777;   /* pink-600 */
-  --color-accent: #a855f7;      /* purple-500 */
+/* Tema: Magos de la Academia Numérica */
+[data-narrative="tema-magos"] {
+  --primary: 271 81% 46%;          /* #7E22CE purple-700 */
+  --primary-foreground: 0 0% 98%;
+  --ring: 271 81% 46%;
 }
 
-/* Narrativa: Caballeros */
-[data-narrative="knights"] {
-  --color-primary: #0891b2;     /* cyan-600 */
-  --color-secondary: #64748b;   /* slate-500 */
-  --color-accent: #f59e0b;      /* amber-500 */
+/* Tema: Caballeros del Reino Decimal */
+[data-narrative="tema-caballeros"] {
+  --primary: 0 72% 51%;            /* #DC2626 red-600 */
+  --primary-foreground: 0 0% 98%;
+  --ring: 0 72% 51%;
 }
 
-/* Narrativa: Cowboys */
-[data-narrative="cowboys"] {
-  --color-primary: #c2410c;     /* orange-700 */
-  --color-secondary: #78350f;   /* brown-900 */
-  --color-accent: #eab308;      /* yellow-500 */
+/* Tema: Vaqueros del Viejo Oeste */
+[data-narrative="tema-vaqueros"] {
+  --primary: 32 81% 37%;           /* #B45309 amber-700 */
+  --primary-foreground: 0 0% 98%;
+  --ring: 32 81% 37%;
 }
 
-/* Narrativa: Princesas Inventoras */
-[data-narrative="princess-inventors"] {
-  --color-primary: #ec4899;     /* pink-500 */
-  --color-secondary: #8b5cf6;   /* violet-500 */
-  --color-accent: #14b8a6;      /* teal-500 */
+/* Tema: Príncipes y Princesas Inventores */
+[data-narrative="tema-inventores"] {
+  --primary: 192 91% 36%;          /* #0891B2 cyan-600 */
+  --primary-foreground: 0 0% 98%;
+  --ring: 192 91% 36%;
 }
+
+/* ---- Color personalizado del inventario ----
+   Se aplica directamente via html.style en MainLayout (inline style),
+   que tiene prioridad máxima sobre cualquier selector CSS.
+   No necesita regla CSS adicional. */
 
 /* Estilos base */
 body {

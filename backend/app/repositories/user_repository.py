@@ -43,9 +43,21 @@ class UserRepository:
         return result.scalar_one_or_none()
     
     async def get_by_id(self, user_id: int) -> Optional[Usuario]:
-        """Busca un usuario por ID."""
+        """
+        Busca un usuario por ID devolviendo el subtipo concreto (Estudiante o Profesor).
+        Necesario para que isinstance() funcione correctamente en los guards de rol.
+        """
+        # Intentar como estudiante primero
         result = await self.db.execute(
-            select(Usuario).where(Usuario.id == user_id)
+            select(Estudiante).where(Estudiante.id == user_id)
+        )
+        estudiante = result.scalar_one_or_none()
+        if estudiante:
+            return estudiante
+
+        # Intentar como profesor
+        result = await self.db.execute(
+            select(Profesor).where(Profesor.id == user_id)
         )
         return result.scalar_one_or_none()
     
@@ -68,45 +80,49 @@ class UserRepository:
         codigo_estudiante: str,
         password_hash: str,
         nombre_completo: str,
-        email: Optional[str] = None
+        password_plain: Optional[str] = None,
+        organizacion_id: Optional[int] = None,
     ) -> Estudiante:
         """
         Crea un nuevo estudiante.
-        
+
         Returns:
             Estudiante creado con ID asignado por la BD
         """
         estudiante = Estudiante(
             codigo_estudiante=codigo_estudiante,
             password_hash=password_hash,
+            password_plain=password_plain,
             tipo_usuario=TipoUsuario.ESTUDIANTE,
             nombre_completo=nombre_completo,
-            email=email,
+            organizacion_id=organizacion_id,
             activo=True
         )
-        
+
         self.db.add(estudiante)
         await self.db.commit()  # COMMIT en vez de flush
         await self.db.refresh(estudiante)
-        
+
         return estudiante
-    
+
     async def create_teacher(
         self,
         codigo_profesor: str,
         password_hash: str,
         nombre_completo: str,
+        password_plain: Optional[str] = None,
         institucion: Optional[str] = None,
-        email: Optional[str] = None
+        organizacion_id: Optional[int] = None,
     ) -> Profesor:
         """Crea un nuevo profesor."""
         profesor = Profesor(
             codigo_profesor=codigo_profesor,
             password_hash=password_hash,
+            password_plain=password_plain,
             tipo_usuario=TipoUsuario.PROFESOR,
             nombre_completo=nombre_completo,
             institucion=institucion,
-            email=email,
+            organizacion_id=organizacion_id,
             activo=True
         )
         

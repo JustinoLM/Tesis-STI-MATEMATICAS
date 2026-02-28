@@ -145,7 +145,7 @@ class PruebaDiagnostica(Base):
     estudiante_id = Column(Integer, ForeignKey("estudiante.id"), nullable=False)
     
     # Estado
-    estado = Column(Enum(EstadoDiagnostico), default=EstadoDiagnostico.PENDIENTE)
+    estado = Column(Enum(EstadoDiagnostico, values_callable=lambda x: [e.value for e in x]), default=EstadoDiagnostico.PENDIENTE)
     fecha_inicio = Column(DateTime, nullable=True)
     fecha_fin = Column(DateTime, nullable=True)
     
@@ -209,7 +209,7 @@ class SesionPractica(Base):
     perfil_id = Column(Integer, ForeignKey("perfil_estudiante.estudiante_id"), nullable=False)
     
     # Estado de la sesión
-    estado = Column(Enum(EstadoSesion), default=EstadoSesion.INICIADA, nullable=False)
+    estado = Column(Enum(EstadoSesion, values_callable=lambda x: [e.value for e in x]), default=EstadoSesion.INICIADA, nullable=False)
     progreso_actual = Column(Integer, default=0)  # Índice del problema actual (0-based)
     
     # Timestamps

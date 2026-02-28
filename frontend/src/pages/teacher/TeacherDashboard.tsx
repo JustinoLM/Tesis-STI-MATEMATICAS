@@ -3,7 +3,8 @@
  * Muestra resumen de grupos, alertas recientes y accesos rápidos.
  */
 
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
   Users,
@@ -14,13 +15,50 @@ import {
   Award,
   Clock,
   Plus,
+  Loader2,
 } from 'lucide-react';
 import { teacherService } from '@/services/teacherService';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 export default function TeacherDashboard() {
+  const queryClient = useQueryClient();
+  const [dialogGrupoOpen, setDialogGrupoOpen] = useState(false);
+  const [nombreGrupo, setNombreGrupo] = useState('');
+  const [codigoGrupo, setCodigoGrupo] = useState('');
+  const [errorGrupo, setErrorGrupo] = useState<string | null>(null);
+
+  const crearGrupoMutation = useMutation({
+    mutationFn: () => teacherService.crearGrupo(nombreGrupo, codigoGrupo),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teacher', 'groups'] });
+      setDialogGrupoOpen(false);
+      setNombreGrupo('');
+      setCodigoGrupo('');
+      setErrorGrupo(null);
+    },
+    onError: (err: Error) => {
+      setErrorGrupo(err.message);
+    },
+  });
+
+  const handleCrearGrupo = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorGrupo(null);
+    if (nombreGrupo.trim() && codigoGrupo.trim()) {
+      crearGrupoMutation.mutate();
+    }
+  };
+
   // Obtener datos del dashboard
   const { data: grupos, isLoading: loadingGrupos } = useQuery({
     queryKey: ['teacher', 'groups'],
@@ -56,12 +94,11 @@ export default function TeacherDashboard() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Link to="/teacher/groups/new">
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Crear Grupo
-            </Button>
-          </Link>
+          {/* Botón Crear Grupo — abre Dialog inline */}
+          <Button onClick={() => setDialogGrupoOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Crear Grupo
+          </Button>
           <Link to="/teacher/challenges/new">
             <Button variant="outline">
               <Target className="mr-2 h-4 w-4" />
@@ -70,6 +107,55 @@ export default function TeacherDashboard() {
           </Link>
         </div>
       </div>
+
+      {/* Dialog Crear Grupo */}
+      <Dialog open={dialogGrupoOpen} onOpenChange={(open) => {
+        setDialogGrupoOpen(open);
+        if (!open) { setNombreGrupo(''); setCodigoGrupo(''); setErrorGrupo(null); }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Crear Nuevo Grupo</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCrearGrupo} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="nombre-g">Nombre del Grupo</Label>
+              <Input
+                id="nombre-g"
+                value={nombreGrupo}
+                onChange={(e) => setNombreGrupo(e.target.value)}
+                placeholder="ej. 5to Grado A"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="codigo-g">Código del Grupo</Label>
+              <Input
+                id="codigo-g"
+                value={codigoGrupo}
+                onChange={(e) => setCodigoGrupo(e.target.value)}
+                placeholder="ej. 5A-2024"
+                required
+              />
+            </div>
+            {errorGrupo && (
+              <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
+                {errorGrupo}
+              </p>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setDialogGrupoOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={crearGrupoMutation.isPending}>
+                {crearGrupoMutation.isPending
+                  ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Creando...</>
+                  : 'Crear Grupo'}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Tarjetas de Estadísticas */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -254,12 +340,10 @@ export default function TeacherDashboard() {
               <p className="text-muted-foreground mb-4">
                 Aún no tienes grupos creados
               </p>
-              <Link to="/teacher/groups/new">
-                <Button>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Crear Primer Grupo
-                </Button>
-              </Link>
+              <Button onClick={() => setDialogGrupoOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Crear Primer Grupo
+              </Button>
             </div>
           )}
         </CardContent>

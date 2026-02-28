@@ -14,7 +14,7 @@ from app.repositories.practice_repository import PracticeRepository
 from app.repositories.adaptive_repository import AdaptiveRepository
 from app.repositories.problem_repository import ProblemRepository
 from app.models.adaptive import SesionPractica, EstadoSesion, AlertaEstudiante, TipoAlerta
-from app.models.problem import Intento, Problema
+from app.models.problem import Intento, Problema, TipoSesion
 from app.schemas.practice import (
     SessionProgressResponse,
     NextProblemResponse,
@@ -316,19 +316,19 @@ class PracticeService:
                 detail=f"Ya agotaste los {self.MAX_INTENTOS_POR_PROBLEMA} intentos para este problema"
             )
         
-        es_correcto = abs(respuesta - problema.resultado) <= Decimal("0.01")
+        respuesta_dec = Decimal(str(respuesta))
+        es_correcto = abs(respuesta_dec - problema.resultado) <= Decimal("0.01")
         
-        intento = Intento(
+        await self.problem_repo.create_intento(
             estudiante_id=estudiante_id,
             problema_id=problema_id,
-            sesion_id=sesion_id,
-            respuesta=respuesta,
+            respuesta_estudiante=respuesta_dec,
             es_correcto=es_correcto,
             tiempo_resolucion=tiempo_resolucion,
-            timestamp=datetime.utcnow()
+            solicito_pista=False,
+            tipo_sesion=TipoSesion.PRACTICA,
+            sesion_id=sesion_id
         )
-        
-        await self.problem_repo.create_intento(intento)
         
         intentos_restantes = self.MAX_INTENTOS_POR_PROBLEMA - (intentos_previos + 1)
         debe_avanzar = es_correcto or intentos_restantes == 0
@@ -590,7 +590,7 @@ class PracticeService:
         
         for nombre, nivel, simbolo in operaciones:
             stats.append(StatsPerOperation(
-                operacion=simbolo,
+                operacion=nombre,
                 nivel_actual=nivel,
                 total_intentos=0,
                 total_correctos=0,

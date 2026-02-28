@@ -15,7 +15,8 @@ from decimal import Decimal
 
 from app.api.dependencies import (
     CurrentStudent,
-    AdaptiveServiceDep
+    AdaptiveServiceDep,
+    GamificationServiceDep
 )
 from app.schemas.adaptive import (
     DiagnosticoSubmit,
@@ -51,19 +52,23 @@ async def iniciar_diagnostico(
 async def enviar_diagnostico(
     diagnostico_submit: DiagnosticoSubmit,
     current_student: CurrentStudent,
-    adaptive_service: AdaptiveServiceDep
+    adaptive_service: AdaptiveServiceDep,
+    gamification_service: GamificationServiceDep,
 ):
     """
     Envía las respuestas del diagnóstico y obtiene niveles asignados.
-    
+
     Casos:
     - 8/8 correctos → Nivel 4, todas operaciones nivel 2
     - Mixto → Niveles según desempeño por operación
     """
-    return await adaptive_service.evaluar_diagnostico(
+    resultado = await adaptive_service.evaluar_diagnostico(
         diagnostico_id=diagnostico_submit.diagnostico_id,
-        respuestas=diagnostico_submit.respuestas
+        respuestas=diagnostico_submit.respuestas,
     )
+    # Otorgar medallas (e.g. medalla de diagnóstico completado)
+    await gamification_service.verificar_y_otorgar_medallas(current_student.id)
+    return resultado
 
 
 # ============================================
@@ -92,19 +97,26 @@ async def iniciar_practica(
 async def completar_practica(
     sesion_complete: SesionComplete,
     current_student: CurrentStudent,
-    adaptive_service: AdaptiveServiceDep
+    adaptive_service: AdaptiveServiceDep,
+    gamification_service: GamificationServiceDep
 ):
     """
     Completa una sesión de práctica y evalúa cambios de nivel.
-    
+
     El sistema:
     1. Evalúa desempeño por operación
     2. Decide si subir/bajar niveles
     3. Actualiza métricas del perfil
     4. Clasifica perfil con ML (si tiene suficientes datos)
     5. Retorna feedback y cambios de nivel
+    6. Otorga puntos al estudiante
     """
-    return await adaptive_service.completar_sesion(sesion_complete.sesion_id)
+    resultado = await adaptive_service.completar_sesion(sesion_complete.sesion_id)
+    await gamification_service.registrar_puntos_sesion(
+        sesion_id=sesion_complete.sesion_id,
+        estudiante_id=current_student.id
+    )
+    return resultado
 
 
 # ============================================

@@ -28,6 +28,7 @@ interface NavItem {
 const studentNav: NavItem[] = [
   { title: 'Inicio', href: '/student/dashboard', icon: Home },
   { title: 'Practicar', href: '/student/practice', icon: BookOpen },
+  { title: 'Desafíos', href: '/student/challenges', icon: Target },
   { title: 'Inventario', href: '/student/inventory', icon: Package },
   { title: 'Tienda', href: '/student/shop', icon: ShoppingBag },
   { title: 'Medallero', href: '/student/badges', icon: Trophy },

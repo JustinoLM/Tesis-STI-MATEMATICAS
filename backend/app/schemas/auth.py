@@ -6,7 +6,7 @@ Usuarios creados por administrador (no registro público).
 """
 
 from typing import Optional
-from pydantic import BaseModel, EmailStr, Field, validator
+from pydantic import BaseModel, Field, validator
 from datetime import datetime
 
 from app.models.user import TipoUsuario
@@ -19,40 +19,36 @@ from app.models.user import TipoUsuario
 class LoginRequest(BaseModel):
     """
     Request para login.
-    
+
     Estudiantes: codigo_estudiante + password
     Profesores: codigo_profesor + password
     """
     codigo: str = Field(min_length=5, max_length=50, description="Código de estudiante o profesor")
     password: str = Field(min_length=6, max_length=100)
-    
+
     class Config:
         json_schema_extra = {
             "example": {
-                "codigo": "EST2024001",
+                "codigo": "EST001",
                 "password": "password123"
             }
         }
 
 
 class CreateStudentRequest(BaseModel):
-    """
-    Request para crear estudiante (solo admin).
-    
-    El administrador provee código y password inicial.
-    """
+    """Request para crear estudiante (solo admin)."""
     codigo_estudiante: str = Field(min_length=5, max_length=50)
     nombre_completo: str = Field(min_length=3, max_length=255)
     password: str = Field(min_length=6, max_length=100)
-    email: Optional[EmailStr] = None  # Opcional para notificaciones futuras
-    
+    organizacion_id: Optional[int] = None
+
     class Config:
         json_schema_extra = {
             "example": {
-                "codigo_estudiante": "EST2024001",
+                "codigo_estudiante": "EST001",
                 "nombre_completo": "Juan Pérez",
                 "password": "temp123",
-                "email": None
+                "organizacion_id": 1,
             }
         }
 
@@ -63,8 +59,8 @@ class CreateTeacherRequest(BaseModel):
     nombre_completo: str = Field(min_length=3, max_length=255)
     password: str = Field(min_length=6, max_length=100)
     institucion: Optional[str] = Field(None, max_length=255)
-    email: Optional[EmailStr] = None
-    
+    organizacion_id: Optional[int] = None
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -72,7 +68,7 @@ class CreateTeacherRequest(BaseModel):
                 "nombre_completo": "María Gómez",
                 "password": "temp123",
                 "institucion": "Escuela Primaria Central",
-                "email": None
+                "organizacion_id": 1,
             }
         }
 
@@ -81,7 +77,7 @@ class ChangePasswordRequest(BaseModel):
     """Request para cambiar contraseña."""
     password_actual: str = Field(min_length=6, max_length=100)
     password_nueva: str = Field(min_length=6, max_length=100)
-    
+
     @validator('password_nueva')
     def passwords_different(cls, v, values):
         """Valida que la nueva contraseña sea diferente."""
@@ -101,7 +97,7 @@ class UserBase(BaseModel):
     fecha_creacion: datetime
     ultimo_acceso: Optional[datetime]
     activo: bool
-    
+
     class Config:
         from_attributes = True
 
@@ -111,8 +107,7 @@ class StudentResponse(UserBase):
     codigo_estudiante: str
     nombre_completo: str
     narrativa_seleccionada_id: Optional[int]
-    email: Optional[str]
-    
+
     class Config:
         from_attributes = True
         json_schema_extra = {
@@ -122,10 +117,9 @@ class StudentResponse(UserBase):
                 "fecha_creacion": "2024-01-15T10:30:00",
                 "ultimo_acceso": "2024-01-20T14:45:00",
                 "activo": True,
-                "codigo_estudiante": "EST2024001",
+                "codigo_estudiante": "EST001",
                 "nombre_completo": "Juan Pérez",
-                "narrativa_seleccionada_id": 1,
-                "email": None
+                "narrativa_seleccionada_id": None,
             }
         }
 
@@ -135,8 +129,7 @@ class TeacherResponse(UserBase):
     codigo_profesor: str
     nombre_completo: str
     institucion: Optional[str]
-    email: Optional[str]
-    
+
     class Config:
         from_attributes = True
         json_schema_extra = {
@@ -149,7 +142,6 @@ class TeacherResponse(UserBase):
                 "codigo_profesor": "PROF001",
                 "nombre_completo": "María Gómez",
                 "institucion": "Escuela Primaria Central",
-                "email": None
             }
         }
 
@@ -159,7 +151,10 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserBase
-    
+    # Campos extras para el frontend (evita un segundo request al /me)
+    nombre_completo: str
+    codigo: str  # codigo_estudiante o codigo_profesor
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -171,7 +166,9 @@ class TokenResponse(BaseModel):
                     "fecha_creacion": "2024-01-15T10:30:00",
                     "ultimo_acceso": None,
                     "activo": True
-                }
+                },
+                "nombre_completo": "Juan Pérez",
+                "codigo": "EST001"
             }
         }
 
@@ -179,7 +176,7 @@ class TokenResponse(BaseModel):
 class MessageResponse(BaseModel):
     """Response genérico con mensaje."""
     message: str
-    
+
     class Config:
         json_schema_extra = {
             "example": {

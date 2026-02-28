@@ -1,0 +1,324 @@
+"""
+Router de administración de organizaciones.
+
+Endpoints (todos bajo /admin/organizations — sin auth por ahora):
+- POST   /admin/organizations               Crear organización
+- GET    /admin/organizations               Listar todas
+- GET    /admin/organizations/{id}          Detalle con miembros
+- PUT    /admin/organizations/{id}/professors/{prof_id}   Asignar/quitar org a profesor
+- PUT    /admin/organizations/{id}/students/{est_id}      Asignar/quitar org a estudiante
+"""
+
+from fastapi import APIRouter, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, delete as sa_delete, update as sa_update
+from sqlalchemy.orm import selectinload
+
+from app.api.dependencies import DBSession
+from app.models.organization import Organizacion
+from app.models.user import Profesor, Estudiante
+from app.models.group import Grupo, EstudianteGrupo
+from app.schemas.organization import (
+    CreateOrganizacionRequest,
+    OrganizacionResponse,
+    OrganizacionListResponse,
+    OrganizacionDetalleResponse,
+    MiembroResponse,
+    AsignarOrganizacionRequest,
+)
+
+router = APIRouter()
+
+
+# ─── Helpers ──────────────────────────────────────────────────────────────────
+
+async def _get_org_or_404(org_id: int, db: AsyncSession) -> Organizacion:
+    result = await db.execute(select(Organizacion).where(Organizacion.id == org_id))
+    org = result.scalar_one_or_none()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organización no encontrada")
+    return org
+
+
+async def _contar_miembros(org_id: int, db: AsyncSession) -> tuple[int, int]:
+    """Retorna (total_profesores, total_estudiantes) para una org."""
+    profs = await db.execute(
+        select(func.count()).select_from(Profesor).where(Profesor.organizacion_id == org_id)
+    )
+    ests = await db.execute(
+        select(func.count()).select_from(Estudiante).where(Estudiante.organizacion_id == org_id)
+    )
+    return profs.scalar_one(), ests.scalar_one()
+
+
+def _to_response(org: Organizacion, total_profs: int = 0, total_ests: int = 0) -> OrganizacionResponse:
+    return OrganizacionResponse(
+        id=org.id,
+        nombre=org.nombre,
+        codigo=org.codigo,
+        descripcion=org.descripcion,
+        ciudad=org.ciudad,
+        pais=org.pais,
+        fecha_creacion=org.fecha_creacion,
+        activa=bool(org.activa),
+        total_profesores=total_profs,
+        total_estudiantes=total_ests,
+    )
+
+
+# ─── Endpoints ────────────────────────────────────────────────────────────────
+
+@router.post("/admin/organizations", response_model=OrganizacionResponse, status_code=status.HTTP_201_CREATED)
+async def crear_organizacion(data: CreateOrganizacionRequest, db: DBSession):
+    """Crea una nueva organización / colegio."""
+    # Verificar unicidad de código y nombre
+    existing = await db.execute(
+        select(Organizacion).where(
+            (Organizacion.codigo == data.codigo.upper()) |
+            (Organizacion.nombre == data.nombre)
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Ya existe una organización con ese código o nombre")
+
+    org = Organizacion(
+        nombre=data.nombre.strip(),
+        codigo=data.codigo.strip().upper(),
+        descripcion=data.descripcion,
+        ciudad=data.ciudad,
+        pais=data.pais or "Panamá",
+    )
+    db.add(org)
+    await db.commit()
+    await db.refresh(org)
+    return _to_response(org)
+
+
+@router.get("/admin/organizations", response_model=OrganizacionListResponse)
+async def listar_organizaciones(db: DBSession):
+    """Lista todas las organizaciones con conteo de miembros."""
+    result = await db.execute(select(Organizacion).order_by(Organizacion.nombre))
+    orgs = result.scalars().all()
+
+    items = []
+    for org in orgs:
+        profs, ests = await _contar_miembros(org.id, db)
+        items.append(_to_response(org, profs, ests))
+
+    return OrganizacionListResponse(total=len(items), organizaciones=items)
+
+
+@router.get("/admin/organizations/{org_id}", response_model=OrganizacionDetalleResponse)
+async def detalle_organizacion(org_id: int, db: DBSession):
+    """Detalle de una organización con lista de miembros."""
+    org = await _get_org_or_404(org_id, db)
+
+    profs_result = await db.execute(
+        select(Profesor).where(Profesor.organizacion_id == org_id)
+    )
+    profesores = profs_result.scalars().all()
+
+    ests_result = await db.execute(
+        select(Estudiante).where(Estudiante.organizacion_id == org_id)
+    )
+    estudiantes = ests_result.scalars().all()
+
+    return OrganizacionDetalleResponse(
+        id=org.id,
+        nombre=org.nombre,
+        codigo=org.codigo,
+        descripcion=org.descripcion,
+        ciudad=org.ciudad,
+        pais=org.pais,
+        fecha_creacion=org.fecha_creacion,
+        activa=bool(org.activa),
+        total_profesores=len(profesores),
+        total_estudiantes=len(estudiantes),
+        profesores=[
+            MiembroResponse(
+                id=p.id,
+                codigo=p.codigo_profesor,
+                nombre_completo=p.nombre_completo,
+                tipo="profesor",
+            )
+            for p in profesores
+        ],
+        estudiantes=[
+            MiembroResponse(
+                id=e.id,
+                codigo=e.codigo_estudiante,
+                nombre_completo=e.nombre_completo,
+                tipo="estudiante",
+            )
+            for e in estudiantes
+        ],
+    )
+
+
+@router.put("/admin/organizations/{org_id}/professors/{prof_id}", response_model=dict)
+async def asignar_org_a_profesor(org_id: int, prof_id: int, db: DBSession):
+    """Asigna el profesor a la organización (o quita asignación si org_id=0)."""
+    # Verificar que la org existe
+    await _get_org_or_404(org_id, db)
+
+    result = await db.execute(select(Profesor).where(Profesor.id == prof_id))
+    prof = result.scalar_one_or_none()
+    if not prof:
+        raise HTTPException(status_code=404, detail="Profesor no encontrado")
+
+    prof.organizacion_id = org_id
+    await db.commit()
+    return {"success": True, "mensaje": f"Profesor asignado a organización {org_id}"}
+
+
+@router.delete("/admin/organizations/{org_id}/professors/{prof_id}", response_model=dict)
+async def quitar_org_a_profesor(org_id: int, prof_id: int, db: DBSession):
+    """Quita al profesor de la organización."""
+    result = await db.execute(select(Profesor).where(Profesor.id == prof_id))
+    prof = result.scalar_one_or_none()
+    if not prof:
+        raise HTTPException(status_code=404, detail="Profesor no encontrado")
+
+    prof.organizacion_id = None
+    await db.commit()
+    return {"success": True, "mensaje": "Profesor removido de la organización"}
+
+
+@router.put("/admin/organizations/{org_id}/students/{est_id}", response_model=dict)
+async def asignar_org_a_estudiante(org_id: int, est_id: int, db: DBSession):
+    """Asigna el estudiante a la organización."""
+    await _get_org_or_404(org_id, db)
+
+    result = await db.execute(select(Estudiante).where(Estudiante.id == est_id))
+    est = result.scalar_one_or_none()
+    if not est:
+        raise HTTPException(status_code=404, detail="Estudiante no encontrado")
+
+    est.organizacion_id = org_id
+    await db.commit()
+    return {"success": True, "mensaje": f"Estudiante asignado a organización {org_id}"}
+
+
+@router.delete("/admin/organizations/{org_id}/students/{est_id}", response_model=dict)
+async def quitar_org_a_estudiante(org_id: int, est_id: int, db: DBSession):
+    """Quita al estudiante de la organización."""
+    result = await db.execute(select(Estudiante).where(Estudiante.id == est_id))
+    est = result.scalar_one_or_none()
+    if not est:
+        raise HTTPException(status_code=404, detail="Estudiante no encontrado")
+
+    est.organizacion_id = None
+    await db.commit()
+    return {"success": True, "mensaje": "Estudiante removido de la organización"}
+
+
+@router.delete("/admin/organizations/{org_id}", response_model=dict)
+async def eliminar_organizacion(org_id: int, db: DBSession):
+    """
+    Elimina una organización.
+    Desvincula a todos sus miembros (organizacion_id → None) antes de borrar.
+    """
+    org = await _get_org_or_404(org_id, db)
+
+    # Desvincular profesores y estudiantes
+    profs = await db.execute(select(Profesor).where(Profesor.organizacion_id == org_id))
+    for p in profs.scalars().all():
+        p.organizacion_id = None
+
+    ests = await db.execute(select(Estudiante).where(Estudiante.organizacion_id == org_id))
+    for e in ests.scalars().all():
+        e.organizacion_id = None
+
+    await db.delete(org)
+    await db.commit()
+    return {"success": True, "mensaje": f"Organización '{org.nombre}' eliminada"}
+
+
+@router.delete("/admin/professors/{prof_id}", response_model=dict)
+async def eliminar_profesor(prof_id: int, db: DBSession):
+    """
+    Elimina un profesor. Cascade manual:
+    elimina sus grupos (y las relaciones estudiante-grupo de esos grupos).
+    """
+    result = await db.execute(select(Profesor).where(Profesor.id == prof_id))
+    prof = result.scalar_one_or_none()
+    if not prof:
+        raise HTTPException(status_code=404, detail="Profesor no encontrado")
+
+    nombre = prof.nombre_completo
+
+    # 1) Obtener grupos del profesor y eliminar sus relaciones estudiante-grupo
+    grupos_result = await db.execute(select(Grupo).where(Grupo.profesor_id == prof_id))
+    grupos = grupos_result.scalars().all()
+    for grupo in grupos:
+        await db.execute(sa_delete(EstudianteGrupo).where(EstudianteGrupo.grupo_id == grupo.id))
+        await db.delete(grupo)
+    await db.flush()
+
+    # 2) Eliminar el profesor
+    await db.delete(prof)
+    await db.commit()
+    return {"success": True, "mensaje": f"Profesor '{nombre}' eliminado"}
+
+
+@router.delete("/admin/students/{est_id}", response_model=dict)
+async def eliminar_estudiante(est_id: int, db: DBSession):
+    """
+    Elimina un estudiante. Cascade manual:
+    lo saca de todos los grupos antes de borrar.
+    """
+    result = await db.execute(select(Estudiante).where(Estudiante.id == est_id))
+    est = result.scalar_one_or_none()
+    if not est:
+        raise HTTPException(status_code=404, detail="Estudiante no encontrado")
+
+    nombre = est.nombre_completo
+
+    # 1) Sacar de todos los grupos
+    await db.execute(sa_delete(EstudianteGrupo).where(EstudianteGrupo.estudiante_id == est_id))
+    await db.flush()
+
+    # 2) Eliminar el estudiante
+    await db.delete(est)
+    await db.commit()
+    return {"success": True, "mensaje": f"Estudiante '{nombre}' eliminado"}
+
+
+@router.get("/admin/users", response_model=dict)
+async def listar_todos_usuarios(db: DBSession):
+    """Lista todos los profesores y estudiantes para la asignación en AdminPage."""
+    profs_result = await db.execute(select(Profesor).order_by(Profesor.nombre_completo))
+    ests_result = await db.execute(select(Estudiante).order_by(Estudiante.nombre_completo))
+
+    profesores = profs_result.scalars().all()
+    estudiantes = ests_result.scalars().all()
+
+    return {
+        "profesores": [
+            {
+                "id": p.id,
+                "codigo": p.codigo_profesor,
+                "nombre_completo": p.nombre_completo,
+                "organizacion_id": p.organizacion_id,
+                "institucion": p.institucion,
+                "password_plain": p.password_plain,
+                "activo": bool(p.activo),
+                "fecha_creacion": p.fecha_creacion.isoformat() if p.fecha_creacion else None,
+                "ultimo_acceso": p.ultimo_acceso.isoformat() if p.ultimo_acceso else None,
+            }
+            for p in profesores
+        ],
+        "estudiantes": [
+            {
+                "id": e.id,
+                "codigo": e.codigo_estudiante,
+                "nombre_completo": e.nombre_completo,
+                "organizacion_id": e.organizacion_id,
+                "password_plain": e.password_plain,
+                "activo": bool(e.activo),
+                "fecha_creacion": e.fecha_creacion.isoformat() if e.fecha_creacion else None,
+                "ultimo_acceso": e.ultimo_acceso.isoformat() if e.ultimo_acceso else None,
+            }
+            for e in estudiantes
+        ],
+    }

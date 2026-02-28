@@ -98,14 +98,14 @@ class GamificationService:
         
         # Bonus por subida de nivel
         if sesion.cambios_nivel:
-            for cambio in sesion.cambios_nivel:
-                if cambio.get("nivel_nuevo", 0) > cambio.get("nivel_anterior", 0):
-                    if cambio.get("operacion") == "nivel_general":
+            for operacion, cambio in sesion.cambios_nivel.items():
+                if cambio.get("despues", 0) > cambio.get("antes", 0):
+                    if operacion == "nivel_general":
                         puntos += 150
                         desglose["nivel_general_subio"] = 150
                     else:
                         puntos += 75
-                        desglose[f"subio_{cambio.get('operacion')}"] = 75
+                        desglose[f"subio_{operacion}"] = 75
         
         return {
             "total": puntos,
@@ -406,7 +406,7 @@ class GamificationService:
         """Obtiene todas las medallas con estado de obtención."""
         # Obtener todas las medallas
         todas_medallas = await self.gamification_repo.get_todas_medallas()
-        
+
         # Obtener medallas del estudiante
         medallas_obtenidas = await self.gamification_repo.get_medallas_estudiante(estudiante_id)
         obtenidas_ids = {m.medalla_id for m in medallas_obtenidas}
@@ -414,7 +414,11 @@ class GamificationService:
             m.medalla_id: m.fecha_obtencion
             for m in medallas_obtenidas
         }
-        
+
+        # Obtener medalla destacada de la personalización
+        personalizacion = await self.gamification_repo.get_personalizacion(estudiante_id)
+        medalla_destacada_id = personalizacion.medalla_destacada_id if personalizacion else None
+
         responses = []
         for medalla in todas_medallas:
             responses.append(MedallaResponse(
@@ -423,16 +427,41 @@ class GamificationService:
                 descripcion=medalla.descripcion,
                 categoria=medalla.categoria.value,
                 imagen_url=medalla.imagen_url,
+                es_secreta=medalla.es_secreta,
                 orden=medalla.orden,
                 obtenida=medalla.id in obtenidas_ids,
                 fecha_obtencion=obtenidas_dict.get(medalla.id)
             ))
-        
+
         return MedallasResponse(
             total_medallas=len(todas_medallas),
             medallas_obtenidas=len(obtenidas_ids),
-            medallas=responses
+            medallas=responses,
+            medalla_destacada_id=medalla_destacada_id,
         )
+
+    async def set_medalla_destacada(self, estudiante_id: int, medalla_id: Optional[int]) -> None:
+        """Establece la medalla destacada en el dashboard del estudiante."""
+        from sqlalchemy import select
+        from app.models.gamification import PersonalizacionEstudiante
+
+        result = await self.gamification_repo.db.execute(
+            select(PersonalizacionEstudiante).where(
+                PersonalizacionEstudiante.estudiante_id == estudiante_id
+            )
+        )
+        personalizacion = result.scalar_one_or_none()
+
+        if not personalizacion:
+            personalizacion = PersonalizacionEstudiante(
+                estudiante_id=estudiante_id,
+                medalla_destacada_id=medalla_id,
+            )
+            self.gamification_repo.db.add(personalizacion)
+        else:
+            personalizacion.medalla_destacada_id = medalla_id
+
+        await self.gamification_repo.db.commit()
     
     async def verificar_y_otorgar_medallas(
         self,
@@ -528,16 +557,22 @@ class GamificationService:
             # TODO: Implementar cuando tengamos tracking de temas por sesión
             return False
         
+        elif tipo == "racha":
+            # Mejor racha histórica de sesiones perfectas consecutivas
+            cantidad_req = criterio.get("cantidad", 20)
+            mejor_racha = await self.adaptive_repo.get_mejor_racha_perfectas(estudiante_id)
+            return mejor_racha >= cantidad_req
+
         elif tipo == "coleccionista":
             # Comprar X items
             cantidad_req = criterio.get("cantidad", 20)
             items_poseidos = await self.gamification_repo.get_items_poseidos(estudiante_id)
             return len(items_poseidos) >= cantidad_req
-        
+
         elif tipo == "desafio_grupal":
             # Participar en desafíos (preparado para futuro)
             return False
-        
+
         return False
     
     # ============================================

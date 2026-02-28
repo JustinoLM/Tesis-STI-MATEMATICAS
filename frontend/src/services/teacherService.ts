@@ -12,7 +12,34 @@ import {
   ProgresoEstudiante,
 } from '@/types';
 
+/** Estudiante de la organización del profesor (endpoint GET /teachers/students). */
+export interface EstudianteOrg {
+  id: number;
+  codigo_estudiante: string;
+  nombre_completo: string;
+  activo: boolean;
+}
+
+export interface PerfilProfesor {
+  id: number;
+  codigo_profesor: string;
+  nombre_completo: string;
+  institucion: string | null;
+  organizacion_nombre: string | null;
+}
+
 export const teacherService = {
+  // ==================== PERFIL ====================
+
+  async getPerfilProfesor(): Promise<PerfilProfesor> {
+    try {
+      const response = await apiClient.get<PerfilProfesor>('/teachers/me');
+      return response.data;
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+  },
+
   // ==================== GRUPOS ====================
 
   /**
@@ -49,6 +76,14 @@ export const teacherService = {
         codigo_grupo: codigoGrupo,
       });
       return response.data;
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+  },
+
+  async eliminarGrupo(grupoId: number): Promise<void> {
+    try {
+      await apiClient.delete(`/teachers/groups/${grupoId}`);
     } catch (error) {
       throw new Error(getErrorMessage(error));
     }
@@ -186,6 +221,20 @@ export const teacherService = {
   // ==================== ESTUDIANTES ====================
 
   /**
+   * Obtener todos los estudiantes de la organización del profesor.
+   * Opcionalmente filtra por nombre o código con ?q=...
+   */
+  async getEstudiantesOrg(q?: string): Promise<EstudianteOrg[]> {
+    try {
+      const params = q ? { q } : {};
+      const response = await apiClient.get<EstudianteOrg[]>('/teachers/students', { params });
+      return response.data;
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+  },
+
+  /**
    * Buscar estudiantes por nombre o código.
    */
   async buscarEstudiantes(query: string): Promise<any[]> {
@@ -198,12 +247,35 @@ export const teacherService = {
   },
 
   /**
-   * Obtener progreso detallado de un estudiante.
+   * Obtener progreso detallado de un estudiante (legacy).
    */
   async getProgresoEstudiante(estudianteId: number): Promise<ProgresoEstudiante> {
     try {
-      // Asumiendo que existe este endpoint o lo adaptamos del endpoint de estudiante
       const response = await apiClient.get<ProgresoEstudiante>(`/students/${estudianteId}/progress`);
+      return response.data;
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+  },
+
+  /**
+   * Obtener perfil adaptativo de un estudiante (mismo formato que GET /adaptive/profile).
+   */
+  async getPerfilEstudiante(estudianteId: number): Promise<any> {
+    try {
+      const response = await apiClient.get(`/teachers/students/${estudianteId}/profile`);
+      return response.data;
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+  },
+
+  /**
+   * Obtener estadísticas de práctica de un estudiante (mismo formato que GET /practices/stats).
+   */
+  async getStatsEstudiante(estudianteId: number): Promise<any> {
+    try {
+      const response = await apiClient.get(`/teachers/students/${estudianteId}/stats`);
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));

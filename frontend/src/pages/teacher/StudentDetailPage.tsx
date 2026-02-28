@@ -1,6 +1,6 @@
 /**
- * Página de detalle de un estudiante específico.
- * Muestra progreso individual, desglose por operaciones y últimos intentos.
+ * Página de detalle de un estudiante específico (vista del profesor).
+ * Muestra exactamente la misma pantalla de progreso que ve el estudiante.
  */
 
 import { useParams, Link } from 'react-router-dom';
@@ -9,39 +9,58 @@ import {
   ArrowLeft,
   TrendingUp,
   Target,
-  Award,
   Clock,
-  Flame,
-  CheckCircle,
-  XCircle,
-  BarChart3,
+  Loader2,
+  Lock,
 } from 'lucide-react';
 import { teacherService } from '@/services/teacherService';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+
+const OP_CONFIG: Record<string, { label: string; colorBar: string }> = {
+  suma:           { label: 'Suma',           colorBar: 'bg-blue-500' },
+  resta:          { label: 'Resta',          colorBar: 'bg-green-500' },
+  multiplicacion: { label: 'Multiplicación', colorBar: 'bg-purple-500' },
+  division:       { label: 'División',       colorBar: 'bg-orange-500' },
+};
+
+function formatSegundos(segundos: number): string {
+  if (!segundos) return '0 min';
+  const h = Math.floor(segundos / 3600);
+  const m = Math.floor((segundos % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m} min`;
+}
 
 export default function StudentDetailPage() {
   const { id } = useParams<{ id: string }>();
   const estudianteId = parseInt(id || '0');
 
-  // Obtener progreso del estudiante
-  const { data: progreso, isLoading } = useQuery({
-    queryKey: ['teacher', 'student', estudianteId, 'progress'],
-    queryFn: () => teacherService.getProgresoEstudiante(estudianteId),
+  const { data: perfil, isLoading: loadingPerfil } = useQuery({
+    queryKey: ['teacher', 'student', estudianteId, 'profile'],
+    queryFn: () => teacherService.getPerfilEstudiante(estudianteId),
     enabled: !!estudianteId,
   });
+
+  const { data: stats, isLoading: loadingStats } = useQuery({
+    queryKey: ['teacher', 'student', estudianteId, 'stats'],
+    queryFn: () => teacherService.getStatsEstudiante(estudianteId),
+    enabled: !!estudianteId,
+  });
+
+  const isLoading = loadingPerfil || loadingStats;
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <p className="text-muted-foreground">Cargando información del estudiante...</p>
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mr-2" />
+        <p className="text-muted-foreground">Cargando progreso del estudiante...</p>
       </div>
     );
   }
 
-  if (!progreso) {
+  if (!perfil) {
     return (
       <div className="space-y-6">
         <Link to="/teacher/students">
@@ -59,222 +78,197 @@ export default function StudentDetailPage() {
     );
   }
 
-  // Mapeo de nombres de operaciones
-  const operationNames: Record<string, string> = {
-    suma: 'Suma',
-    resta: 'Resta',
-    multiplicacion: 'Multiplicación',
-    division: 'División',
-  };
+  // ── Datos derivados (misma lógica que ProgressPage) ──────────────────────
+
+  const nivelActual = perfil?.nivel_actual ?? 1;
+  const umbral = perfil?.umbral_promocion ?? 10;
+  const consecutivas = perfil?.consecutivas_por_operacion ?? {};
+  const opDisponibles: string[] = perfil?.operaciones_disponibles ?? [];
+  const progresoNivel =
+    opDisponibles.length > 0
+      ? Math.round(
+          (opDisponibles.reduce((acc: number, op: string) => acc + Math.min((consecutivas[op] ?? 0), umbral), 0) /
+            (opDisponibles.length * umbral)) *
+            100
+        )
+      : 0;
+
+  const operacionesBE: any[] = stats?.stats_por_operacion ?? [];
+  const opOrden = ['suma', 'resta', 'multiplicacion', 'division'];
+
+  const tiempoEstimadoSeg =
+    stats && stats.total_problemas_resueltos > 0 && stats.velocidad_promedio_global > 0
+      ? Math.round(stats.total_problemas_resueltos * stats.velocidad_promedio_global)
+      : 0;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-1">
-          <Link to="/teacher/students">
-            <Button variant="ghost" size="sm">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Volver a Estudiantes
-            </Button>
-          </Link>
-          <h1 className="text-3xl font-bold">{progreso.nombre_completo}</h1>
-          <div className="flex items-center gap-2">
-            <code className="text-sm bg-muted px-2 py-1 rounded">
-              {progreso.codigo_estudiante}
-            </code>
-            <Badge variant="outline">Nivel {progreso.nivel_actual}</Badge>
+      {/* Navigation */}
+      <div className="space-y-1">
+        <Link to="/teacher/students">
+          <Button variant="ghost" size="sm">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Volver a Estudiantes
+          </Button>
+        </Link>
+        {perfil?.nombre_estudiante && (
+          <h1 className="text-2xl font-bold">{perfil.nombre_estudiante}</h1>
+        )}
+      </div>
+
+      {/* Header — igual que ProgressPage */}
+      <Card className="bg-gradient-to-r from-green-50 to-emerald-50">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-3">
+            <TrendingUp className="h-8 w-8 text-green-600" />
+            <div>
+              <h2 className="text-2xl font-bold">Progreso del Estudiante</h2>
+              <p className="text-sm text-gray-600 font-normal">Nivel {nivelActual} de 5</p>
+            </div>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span>Progreso al siguiente nivel</span>
+              <span className="font-bold">{progresoNivel}%</span>
+            </div>
+            <Progress value={progresoNivel} className="h-3" />
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
-      {/* Estadísticas Principales */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* Estadísticas generales */}
+      <div className="grid grid-cols-2 gap-4">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Nivel Actual</CardTitle>
-            <Target className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{progreso.nivel_actual}</div>
-            <p className="text-xs text-muted-foreground">De 5 niveles</p>
+          <CardContent className="pt-6">
+            <div className="text-center space-y-2">
+              <Target className="h-8 w-8 mx-auto text-blue-500" />
+              <p className="text-2xl font-bold">{stats?.total_problemas_resueltos ?? 0}</p>
+              <p className="text-sm text-gray-600">Problemas resueltos</p>
+            </div>
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Precisión Global</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{progreso.overall_accuracy.toFixed(1)}%</div>
-            <p className="text-xs text-muted-foreground">De todas las operaciones</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Problemas Resueltos</CardTitle>
-            <Award className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{progreso.total_problemas_resueltos}</div>
-            <p className="text-xs text-muted-foreground">Total de intentos</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Racha Actual</CardTitle>
-            <Flame className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{progreso.current_streak}</div>
-            <p className="text-xs text-muted-foreground">
-              Máximo: {progreso.max_streak}
-            </p>
+          <CardContent className="pt-6">
+            <div className="text-center space-y-2">
+              <Clock className="h-8 w-8 mx-auto text-purple-500" />
+              <p className="text-2xl font-bold">{formatSegundos(tiempoEstimadoSeg)}</p>
+              <p className="text-sm text-gray-600">Tiempo estimado</p>
+            </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Progreso por Operación */}
+      {/* Progreso por operación */}
       <Card>
         <CardHeader>
           <CardTitle>Progreso por Operación</CardTitle>
         </CardHeader>
         <CardContent>
-          {progreso.operations && progreso.operations.length > 0 ? (
-            <div className="space-y-6">
-              {progreso.operations.map((op) => (
-                <div key={op.operation} className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <h3 className="font-semibold">
-                        {operationNames[op.operation] || op.operation}
-                      </h3>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Target className="h-4 w-4" />
-                          Nivel {op.current_level}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Award className="h-4 w-4" />
-                          {op.problems_solved} problemas
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <TrendingUp className="h-4 w-4" />
-                          {op.accuracy.toFixed(1)}% precisión
-                        </span>
+          <div className="space-y-6">
+            {opOrden.map((opKey) => {
+              const cfg = OP_CONFIG[opKey];
+              const opStats = operacionesBE.find((o) => o.operacion === opKey);
+              const disponible = opDisponibles.includes(opKey);
+              const nivelOp = opStats?.nivel_actual ?? 1;
+              const consec = consecutivas[opKey] ?? 0;
+              const progresoOp = Math.min(Math.round((consec / umbral) * 100), 100);
+              const precision = opStats ? Math.round(opStats.precision * 100) : 0;
+              const problemas = opStats?.problemas_resueltos ?? 0;
+
+              return (
+                <div key={opKey} className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-3 h-3 rounded-full ${cfg.colorBar}`} />
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium">{cfg.label}</p>
+                          {!disponible && (
+                            <Lock className="h-3 w-3 text-gray-400" aria-label="Bloqueada" />
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-600">
+                          Nivel {nivelOp} • {problemas} problemas • {precision}% precisión
+                        </p>
                       </div>
                     </div>
-                    <Badge variant={op.current_level === 5 ? 'default' : 'outline'}>
-                      {op.current_level === 5 ? 'Completado' : `${op.progress_to_next_level.toFixed(0)}%`}
-                    </Badge>
+                    <span className="text-sm font-bold">{progresoOp}%</span>
                   </div>
-                  <Progress value={op.progress_to_next_level} className="h-2" />
+                  <Progress
+                    value={disponible ? progresoOp : 0}
+                    className={`h-2 ${!disponible ? 'opacity-30' : ''}`}
+                  />
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              No hay datos de progreso por operación
-            </div>
-          )}
+              );
+            })}
+          </div>
         </CardContent>
       </Card>
 
-      {/* Últimos Intentos */}
+      {/* Precisión global */}
       <Card>
         <CardHeader>
-          <CardTitle>Últimos Intentos</CardTitle>
+          <CardTitle>Precisión Global</CardTitle>
         </CardHeader>
         <CardContent>
-          {progreso.recent_attempts && progreso.recent_attempts.length > 0 ? (
-            <div className="space-y-2">
-              {progreso.recent_attempts.map((attempt) => (
-                <div
-                  key={attempt.id}
-                  className="flex items-center justify-between rounded-lg border p-3 hover:bg-muted/50 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    {attempt.is_correct ? (
-                      <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
-                    ) : (
-                      <XCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
-                    )}
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">
-                          {operationNames[attempt.operation] || attempt.operation}
-                        </span>
-                        <Badge variant="outline" className="text-xs">
-                          Nivel {attempt.level}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {attempt.time_taken.toFixed(1)}s
-                        </span>
-                        <span>
-                          {new Date(attempt.created_at).toLocaleDateString('es-ES', {
-                            day: 'numeric',
-                            month: 'short',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <Badge variant={attempt.is_correct ? 'default' : 'destructive'}>
-                    {attempt.is_correct ? 'Correcto' : 'Incorrecto'}
-                  </Badge>
-                </div>
-              ))}
+          <div className="flex items-center gap-6">
+            <div className="flex-1 space-y-2">
+              <div className="flex justify-between text-sm">
+                <span>Precisión en los últimos 15 intentos</span>
+                <span className="font-bold">
+                  {perfil ? Math.round(Number(perfil.precision_ultimos_15) * 100) : 0}%
+                </span>
+              </div>
+              <Progress
+                value={perfil ? Math.round(Number(perfil.precision_ultimos_15) * 100) : 0}
+                className="h-3"
+              />
             </div>
-          ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              No hay intentos recientes registrados
+            <div className="text-center min-w-[80px]">
+              <p className="text-3xl font-bold text-green-600">
+                {stats ? Math.round(stats.precision_global * 100) : 0}%
+              </p>
+              <p className="text-xs text-gray-500">Precisión global</p>
             </div>
-          )}
+          </div>
         </CardContent>
       </Card>
 
-      {/* Acciones Rápidas */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Link to="/teacher/alerts">
-          <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-            <CardContent className="p-6 flex items-center gap-4">
-              <div className="p-3 rounded-lg bg-yellow-100">
-                <BarChart3 className="h-6 w-6 text-yellow-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold">Ver Alertas</h3>
-                <p className="text-sm text-muted-foreground">
-                  Revisar alertas del estudiante
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
+      {/* Sesiones de los últimos 7 días */}
+      {stats && stats.sesiones_ultimos_7_dias?.some((s: number) => s > 0) && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Últimos 7 Días</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-end gap-2 h-24">
+              {(stats.sesiones_ultimos_7_dias as number[]).map((sesiones, i) => {
+                const maxSesiones = Math.max(...stats.sesiones_ultimos_7_dias, 1);
+                const altura = Math.round((sesiones / maxSesiones) * 100);
+                const diasAtras = 6 - i;
+                const fecha = new Date();
+                fecha.setDate(fecha.getDate() - diasAtras);
+                const diaSemana = fecha.toLocaleDateString('es-ES', { weekday: 'short' });
 
-        <Link to={`/teacher/challenges/new?estudiante=${estudianteId}`}>
-          <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-            <CardContent className="p-6 flex items-center gap-4">
-              <div className="p-3 rounded-lg bg-blue-100">
-                <Target className="h-6 w-6 text-blue-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold">Crear Desafío</h3>
-                <p className="text-sm text-muted-foreground">
-                  Asignar desafío personalizado
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-      </div>
+                return (
+                  <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                    <span className="text-xs text-gray-500">{sesiones > 0 ? sesiones : ''}</span>
+                    <div className="w-full flex items-end justify-center" style={{ height: '72px' }}>
+                      <div
+                        className="w-full bg-green-400 rounded-t transition-all"
+                        style={{ height: `${altura}%`, minHeight: sesiones > 0 ? '4px' : '0' }}
+                      />
+                    </div>
+                    <span className="text-xs text-gray-500 capitalize">{diaSemana}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

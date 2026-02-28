@@ -8,11 +8,11 @@
    Tailwind usa hsl(var(--primary)) así que se sobreescriben aquí.
    ================================================================ */
 
-/* Tema: Clásico (default — igual al shadcn base pero en azul) */
+/* Tema: Clásico (default — negro base para estudiantes sin color desbloqueado) */
 [data-narrative="tema-default"] {
-  --primary: 217 91% 60%;          /* #3B82F6 blue-500 */
+  --primary: 0 0% 9%;              /* #171717 near-black */
   --primary-foreground: 0 0% 98%;
-  --ring: 217 91% 60%;
+  --ring: 0 0% 9%;
 }
 
 /* Tema: Piratas del Caribe Matemático */
@@ -51,7 +51,7 @@
 }
 
 /* Tema: Príncipes y Princesas Inventores */
-[data-narrative="tema-inventores"] {
+[data-narrative="tema-princesas"] {
   --primary: 192 91% 36%;          /* #0891B2 cyan-600 */
   --primary-foreground: 0 0% 98%;
   --ring: 192 91% 36%;

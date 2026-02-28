@@ -58,8 +58,8 @@ export function DivisionGrid({
 
   // Pasos intermedios (productos, dividendos parciales y residuos)
   pasos.forEach((paso, idx) => {
-    // Dividendo parcial (después del primer paso)
-    if (idx > 0 && paso.dividendoParcialStr) {
+    // Dividendo parcial (todos los pasos, incluyendo el primero)
+    if (paso.dividendoParcialStr) {
       paso.dividendoParcialStr.split('').forEach((char: string, charIdx: number) => {
         expectedValues[`paso-${idx}-dividendo-parcial-${charIdx}`] = char;
       });
@@ -210,8 +210,8 @@ export function DivisionGrid({
       <div className="space-y-1">
         {pasos.map((paso, idx: number) => (
           <div key={idx} className="space-y-1">
-            {/* Mostrar dividendo parcial solo después del primer paso */}
-            {idx > 0 && paso.dividendoParcialStr && (
+            {/* Dividendo parcial — mostrar en todos los pasos */}
+            {paso.dividendoParcialStr && (
               <DigitRow
                 expectedValue={paso.dividendoParcialStr}
                 digitosRespuesta={digitosRespuesta}

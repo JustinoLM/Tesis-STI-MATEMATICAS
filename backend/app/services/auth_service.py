@@ -71,10 +71,23 @@ class AuthService:
         # Generar token
         access_token = self._create_token_for_user(user)
         
+        # Extraer nombre y código según tipo de usuario
+        if isinstance(user, Estudiante):
+            nombre_completo = user.nombre_completo
+            codigo = user.codigo_estudiante
+        elif isinstance(user, Profesor):
+            nombre_completo = user.nombre_completo
+            codigo = user.codigo_profesor
+        else:
+            nombre_completo = "Usuario"
+            codigo = f"user_{user.id}"
+
         return TokenResponse(
             access_token=access_token,
             token_type="bearer",
-            user=UserBase.model_validate(user)
+            user=UserBase.model_validate(user),
+            nombre_completo=nombre_completo,
+            codigo=codigo,
         )
     
     async def create_student(self, data: CreateStudentRequest) -> StudentResponse:
@@ -98,8 +111,9 @@ class AuthService:
         estudiante = await self.user_repo.create_student(
             codigo_estudiante=data.codigo_estudiante,
             password_hash=password_hash,
+            password_plain=data.password,
             nombre_completo=data.nombre_completo,
-            email=data.email
+            organizacion_id=data.organizacion_id,
         )
         
         return StudentResponse.model_validate(estudiante)
@@ -120,9 +134,10 @@ class AuthService:
         profesor = await self.user_repo.create_teacher(
             codigo_profesor=data.codigo_profesor,
             password_hash=password_hash,
+            password_plain=data.password,
             nombre_completo=data.nombre_completo,
             institucion=data.institucion,
-            email=data.email
+            organizacion_id=data.organizacion_id,
         )
         
         return TeacherResponse.model_validate(profesor)

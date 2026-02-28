@@ -130,7 +130,14 @@ class PerfilResponse(BaseModel):
     # Actividad
     ultima_actividad: datetime
     dias_sin_practicar: int
-    
+
+    # Diagnóstico
+    diagnostico_completado: bool = False
+
+    # Contexto escolar
+    grupo_nombre: Optional[str] = None
+    profesor_nombre: Optional[str] = None
+
     @field_serializer('precision_ultimos_15', 'velocidad_promedio', 'varianza_velocidad', 'confianza_perfil')
     def serialize_decimal(self, value: Optional[Decimal]) -> Optional[str]:
         if value is None:

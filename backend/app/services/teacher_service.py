@@ -121,12 +121,13 @@ class TeacherService:
         )
     
     async def agregar_estudiante(self, grupo_id: int, estudiante_id: int, profesor_id: int):
-        """Agrega estudiante a grupo."""
+        """Agrega estudiante a grupo. Crea PerfilEstudiante si no tiene."""
         grupo = await self.repo.get_grupo_by_id(grupo_id, profesor_id)
         if not grupo:
             raise ValueError("Grupo no encontrado")
-        
+
         await self.repo.agregar_estudiante_a_grupo(grupo_id, estudiante_id)
+        await self.repo.ensure_perfil_estudiante(estudiante_id)
         await self.db.commit()
     
     async def remover_estudiante(self, grupo_id: int, estudiante_id: int, profesor_id: int):
@@ -134,10 +135,18 @@ class TeacherService:
         grupo = await self.repo.get_grupo_by_id(grupo_id, profesor_id)
         if not grupo:
             raise ValueError("Grupo no encontrado")
-        
+
         await self.repo.remover_estudiante_de_grupo(grupo_id, estudiante_id)
         await self.db.commit()
-    
+
+    async def eliminar_grupo(self, grupo_id: int, profesor_id: int):
+        """Elimina un grupo. Solo el profesor dueño puede eliminarlo."""
+        grupo = await self.repo.get_grupo_by_id(grupo_id, profesor_id)
+        if not grupo:
+            raise ValueError("Grupo no encontrado o no tienes permiso para eliminarlo")
+        await self.repo.eliminar_grupo(grupo)
+        await self.db.commit()
+
     # ==================== CONFIGURACIÓN ====================
     
     async def crear_configuracion(
@@ -153,7 +162,7 @@ class TeacherService:
         config = ConfiguracionPractica(
             grupo_id=data.grupo_id,
             aplicada_por_profesor_id=profesor_id,
-            operaciones_permitidas=[op.value for op in data.operaciones_permitidas],
+            operaciones_permitidas=data.operaciones_permitidas,
             niveles_permitidos=data.niveles_permitidos,
             rango_min=data.rango_min,
             rango_max=data.rango_max,

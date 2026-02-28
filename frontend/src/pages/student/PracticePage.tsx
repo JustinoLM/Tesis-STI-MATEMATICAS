@@ -1,10 +1,16 @@
 /**
  * Página de práctica del estudiante.
- * Con 3 intentos por problema.
+ *
+ * Flujo real con backend:
+ * 1. Al montar → POST /adaptive/practice/start → obtiene sesion_id + todos los problemas
+ * 2. Al verificar → POST /practices/{id}/submit-problem → valida, registra, devuelve siguiente
+ * 3. Cuando sesion_completada=true → GET /gamification/session/{id}/rewards → resultados
+ * 4. Pistas → POST /hints/request → contenido real (LLM para nivel 3)
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -20,232 +26,360 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import {
-  Lightbulb,
-  Check,
-  ChevronRight,
-  Home,
-  AlertCircle,
-  Eraser
-} from 'lucide-react';
+import { Lightbulb, Check, ChevronRight, Home, AlertCircle, Eraser, Loader2 } from 'lucide-react';
 import { ProblemGrid, FeedbackDetallado } from '@/components/problems';
 import { HintModal } from '@/components/problems/HintModal';
 import { HintDisplay } from '@/components/problems/HintDisplay';
 import { SessionResults } from '@/components/practice';
-import { Problema, Operacion, RespuestaValidacion } from '@/types';
+import type { Operacion, RespuestaValidacion } from '@/types';
 import { validarRespuesta } from '@/utils';
+import {
+  studentService,
+  type ProblemaBE,
+  type RecompensasSesionResponse,
+} from '@/services/studentService';
+
+// ─── Tipos locales ────────────────────────────────────────────────────────────
+
+/** Problema tal como lo usa el UI (con campos numéricos ya parseados) */
+interface ProblemaUI {
+  id: number;
+  operacion: Operacion;
+  numero1: number;
+  numero2: number;
+  nivel_dificultad: number;
+  cantidad_decimales: number;
+  pregunta: string;
+}
+
+/** Resultado de cada problema al final de la sesión */
+interface ResultadoProblema {
+  correcto: boolean;
+  operacion: Operacion;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const OPERACION_MAP: Record<string, Operacion> = {
+  '+': 'SUMA',
+  '-': 'RESTA',
+  '×': 'MULTIPLICACION',
+  '÷': 'DIVISION',
+  SUMA: 'SUMA',
+  RESTA: 'RESTA',
+  MULTIPLICACION: 'MULTIPLICACION',
+  DIVISION: 'DIVISION',
+};
+
+const OPERACION_LABEL: Record<Operacion, string> = {
+  SUMA: 'Suma',
+  RESTA: 'Resta',
+  MULTIPLICACION: 'Multiplicación',
+  DIVISION: 'División',
+};
+
+function mapearProblema(be: ProblemaBE): ProblemaUI {
+  const op = OPERACION_MAP[String(be.operacion).toUpperCase()] ?? 'SUMA';
+  const n1 = Number(be.numero1);
+  const n2 = Number(be.numero2);
+  const opSimbolo =
+    op === 'SUMA' ? '+' : op === 'RESTA' ? '−' : op === 'MULTIPLICACION' ? '×' : '÷';
+  return {
+    id: be.id,
+    operacion: op,
+    numero1: n1,
+    numero2: n2,
+    nivel_dificultad: be.nivel_dificultad,
+    cantidad_decimales: be.cantidad_decimales,
+    pregunta: be.pregunta ?? `Resuelve: ${n1} ${opSimbolo} ${n2}`,
+  };
+}
+
+// ─── Componente ───────────────────────────────────────────────────────────────
 
 export function PracticePage() {
   const navigate = useNavigate();
 
-  // TODO: Obtener de practiceStore + React Query
-  const [problemas] = useState<Problema[]>([
-    {
-      id: 1,
-      operacion: 'SUMA' as Operacion,
-      numero1: 234.5,
-      numero2: 156.3,
-      resultado: 390.8,
-      nivel_dificultad: 3,
-      cantidad_decimales: 1,
-      pregunta: 'Resuelve: 234.5 + 156.3',
-    },
-    {
-      id: 2,
-      operacion: 'MULTIPLICACION' as Operacion,
-      numero1: 245,
-      numero2: 123,
-      resultado: 30135,
-      nivel_dificultad: 3,
-      cantidad_decimales: 0,
-      pregunta: 'Resuelve: 245 × 123',
-    },
-    {
-      id: 3,
-      operacion: 'RESTA' as Operacion,
-      numero1: 500.75,
-      numero2: 234.5,
-      resultado: 266.25,
-      nivel_dificultad: 3,
-      cantidad_decimales: 2,
-      pregunta: 'Resuelve: 500.75 − 234.5',
-    },
-    // Casos de División
-    {
-      id: 4,
-      operacion: 'DIVISION' as Operacion,
-      numero1: 12.5,
-      numero2: 2.5,
-      resultado: 5,
-      nivel_dificultad: 2,
-      cantidad_decimales: 1,
-      pregunta: 'Resuelve: 12.5 ÷ 2.5 (Normalización del divisor)',
-    },
-    {
-      id: 5,
-      operacion: 'DIVISION' as Operacion,
-      numero1: 12.5,
-      numero2: 5,
-      resultado: 2.5,
-      nivel_dificultad: 2,
-      cantidad_decimales: 1,
-      pregunta: 'Resuelve: 12.5 ÷ 5 (División vertical)',
-    },
-    {
-      id: 6,
-      operacion: 'DIVISION' as Operacion,
-      numero1: 125,
-      numero2: 25,
-      resultado: 5,
-      nivel_dificultad: 1,
-      cantidad_decimales: 0,
-      pregunta: 'Resuelve: 125 ÷ 25 (División natural)',
-    },
-    {
-      id: 7,
-      operacion: 'DIVISION' as Operacion,
-      numero1: 3.75,
-      numero2: 1.5,
-      resultado: 2.5,
-      nivel_dificultad: 3,
-      cantidad_decimales: 2,
-      pregunta: 'Resuelve: 3.75 ÷ 1.5 (Normalización con 2 decimales)',
-    },
-  ]);
+  // ── Estado de sesión ──────────────────────────────────────────────────────
+  const [sesionId, setSesionId] = useState<number | null>(null);
+  const [problemas, setProblemas] = useState<ProblemaUI[]>([]);
+  const [mensajeIntro, setMensajeIntro] = useState('');
+  const [cargandoSesion, setCargandoSesion] = useState(true);
+  const [errorSesion, setErrorSesion] = useState<string | null>(null);
 
+  // ── Estado del problema actual ────────────────────────────────────────────
   const [indiceProblemActual, setIndiceProblemActual] = useState(0);
   const [respuestaEstudiante, setRespuestaEstudiante] = useState('');
   const [intentosRestantes, setIntentosRestantes] = useState(3);
   const [mostrarFeedback, setMostrarFeedback] = useState(false);
   const [esRespuestaCorrecta, setEsRespuestaCorrecta] = useState(false);
   const [validacionDetallada, setValidacionDetallada] = useState<RespuestaValidacion | null>(null);
-  const [modalPistaAbierto, setModalPistaAbierto] = useState(false);
-  const [pistaActual, setPistaActual] = useState<{ nivel: 1 | 2 | 3; contenido: string } | null>(null);
-  const [pistasUsadas, setPistasUsadas] = useState<number[]>([]);
-  const [puntosDisponibles] = useState(1250);
+  const [respuestaCorrectaBE, setRespuestaCorrectaBE] = useState<string | null>(null);
   const [limpiarKey, setLimpiarKey] = useState(0);
   const [clearIncorrectTrigger, setClearIncorrectTrigger] = useState(0);
 
-  // Estado de resultados de sesión
+  // ── Tiempo de resolución ──────────────────────────────────────────────────
+  const tiempoInicioProblema = useRef<number>(Date.now());
+
+  // ── Pistas ────────────────────────────────────────────────────────────────
+  const [modalPistaAbierto, setModalPistaAbierto] = useState(false);
+  const [pistaActual, setPistaActual] = useState<{ nivel: 1 | 2 | 3; contenido: string } | null>(
+    null
+  );
+  const [pistasUsadas, setPistasUsadas] = useState<number[]>([]);
+  const [cargandoPista, setCargandoPista] = useState(false);
+
+  // ── Resultados de sesión ──────────────────────────────────────────────────
   const [sesionCompletada, setSesionCompletada] = useState(false);
-  const [resultadosProblemas, setResultadosProblemas] = useState<boolean[]>([]);
+  const [resultadosProblemas, setResultadosProblemas] = useState<ResultadoProblema[]>([]);
+  const [recompensas, setRecompensas] = useState<RecompensasSesionResponse | null>(null);
 
-  const problemaActual = problemas[indiceProblemActual];
-  const progreso = Math.round(((indiceProblemActual + 1) / problemas.length) * 100);
+  // ── Derivados ─────────────────────────────────────────────────────────────
+  const problemaActual = problemas[indiceProblemActual] ?? null;
+  const progreso =
+    problemas.length > 0
+      ? Math.round(((indiceProblemActual + 1) / problemas.length) * 100)
+      : 0;
 
-  const handleVerificar = () => {
-    if (!respuestaEstudiante) return;
+  // ── Mutation de envío de respuesta ────────────────────────────────────────
 
-    // Usar función de validación centralizada
-    const validacion = validarRespuesta(
-      problemaActual.operacion,
-      respuestaEstudiante,
-      problemaActual.numero1,
-      problemaActual.numero2,
-      problemaActual.resultado
-    );
+  const submitMutation = useMutation({
+    mutationFn: ({
+      problemaId,
+      respuesta,
+      tiempoResolucion,
+    }: {
+      problemaId: number;
+      respuesta: number;
+      tiempoResolucion: number;
+    }) => studentService.enviarRespuesta(sesionId!, problemaId, respuesta, tiempoResolucion),
 
-    setMostrarFeedback(true);
-    setEsRespuestaCorrecta(validacion.esCorrecta);
-    setValidacionDetallada(validacion);
+    onSuccess: async (data) => {
+      setMostrarFeedback(true);
+      setEsRespuestaCorrecta(data.es_correcto);
+      setIntentosRestantes(data.intentos_restantes);
 
-    if (!validacion.esCorrecta) {
-      setIntentosRestantes(intentosRestantes - 1);
-    }
-  };
+      if (!data.es_correcto && data.respuesta_correcta) {
+        setRespuestaCorrectaBE(data.respuesta_correcta);
+      }
 
-  const handleSiguiente = () => {
-    // Registrar resultado del problema actual
-    setResultadosProblemas(prev => [...prev, esRespuestaCorrecta]);
+      // Feedback visual local (pasos intermedios)
+      if (problemaActual) {
+        const respNum = parseFloat(respuestaEstudiante.replace(',', '.'));
+        const respCorrecta = data.respuesta_correcta
+          ? parseFloat(data.respuesta_correcta)
+          : respNum;
+        const validacion = validarRespuesta(
+          problemaActual.operacion,
+          String(respNum),
+          problemaActual.numero1,
+          problemaActual.numero2,
+          data.es_correcto ? respNum : respCorrecta
+        );
+        setValidacionDetallada(validacion);
+      }
 
-    if (indiceProblemActual < problemas.length - 1) {
-      setIndiceProblemActual(indiceProblemActual + 1);
-      setRespuestaEstudiante('');
-      setMostrarFeedback(false);
-      setEsRespuestaCorrecta(false);
-      setValidacionDetallada(null);
-      setIntentosRestantes(3);
-      setPistasUsadas([]);
-    } else {
-      // Sesión completada - mostrar pantalla de resultados
-      setSesionCompletada(true);
-    }
-  };
+      // Sesión terminada: completar → calcular puntos → pedir recompensas
+      if (data.sesion_completada) {
+        setResultadosProblemas((prev) => [
+          ...prev,
+          { correcto: data.es_correcto, operacion: problemaActual?.operacion ?? 'SUMA' },
+        ]);
+        try {
+          await studentService.finalizarPractica(sesionId!);
+        } catch {
+          // Si falla el complete, igual continuamos para mostrar resultados
+        }
+        try {
+          const recs = await studentService.getRecompensasSesion(sesionId!);
+          setRecompensas(recs);
+        } catch {
+          // Si falla, igual mostramos la pantalla de resultados
+        }
+        setSesionCompletada(true);
+      }
+    },
+  });
 
-  const handleReintentar = () => {
-    setMostrarFeedback(false);
-    // Limpiar solo los inputs incorrectos
-    setClearIncorrectTrigger(prev => prev + 1);
-  };
+  // ── Iniciar sesión al montar ──────────────────────────────────────────────
 
-  const handleLimpiar = () => {
-    setRespuestaEstudiante('');
-    setLimpiarKey(prev => prev + 1);
-  };
+  useEffect(() => {
+    let cancelled = false;
+    setCargandoSesion(true);
+    setErrorSesion(null);
 
-  const handleSolicitarPista = (nivel: 1 | 2 | 3) => {
-    // Mock de contenido de pista
-    const contenidos = {
-      1: 'Recuerda alinear los números por las unidades, decenas y centenas antes de operar.',
-      2: 'Para esta operación, comienza desde las unidades (derecha) y avanza hacia la izquierda.',
-      3: `El resultado correcto es aproximadamente ${Math.floor(problemaActual.resultado / 10) * 10}...`,
+    studentService
+      .iniciarPractica()
+      .then((data) => {
+        if (cancelled) return;
+        setSesionId(data.sesion_id);
+        setProblemas(data.problemas.map(mapearProblema));
+        setMensajeIntro(data.mensaje_intro);
+        tiempoInicioProblema.current = Date.now();
+      })
+      .catch((err: Error) => {
+        if (cancelled) return;
+        // Si el error es por diagnóstico pendiente, redirigir automáticamente
+        if (err.message.toLowerCase().includes('diagnóstico') || err.message.toLowerCase().includes('diagnostico')) {
+          navigate('/student/diagnostic', { replace: true });
+        } else {
+          setErrorSesion(err.message);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCargandoSesion(false);
+      });
+
+    return () => {
+      cancelled = true;
     };
+  }, []);
 
-    setPistaActual({
-      nivel,
-      contenido: contenidos[nivel],
+  // Reiniciar timer cuando cambia de problema
+  useEffect(() => {
+    tiempoInicioProblema.current = Date.now();
+  }, [indiceProblemActual]);
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
+
+  const handleVerificar = useCallback(() => {
+    if (!respuestaEstudiante || !problemaActual || sesionId === null) return;
+    const tiempoSegundos = Math.max(
+      1,
+      Math.round((Date.now() - tiempoInicioProblema.current) / 1000)
+    );
+    const respuestaNum = parseFloat(respuestaEstudiante.replace(',', '.'));
+    if (isNaN(respuestaNum)) return;
+
+    submitMutation.mutate({
+      problemaId: problemaActual.id,
+      respuesta: respuestaNum,
+      tiempoResolucion: tiempoSegundos,
     });
-    setPistasUsadas([...pistasUsadas, nivel]);
+  }, [respuestaEstudiante, problemaActual, sesionId, submitMutation]);
 
-    // TODO: Restar puntos si es nivel 3
-    if (nivel === 3) {
-      console.log('Restar 10 puntos');
-    }
-  };
+  const handleSiguiente = useCallback(() => {
+    // Registrar resultado antes de avanzar (solo si no fue auto-registrado por sesion_completada)
+    setResultadosProblemas((prev) => [
+      ...prev,
+      { correcto: esRespuestaCorrecta, operacion: problemaActual?.operacion ?? 'SUMA' },
+    ]);
+    setIndiceProblemActual((prev) => prev + 1);
+    setRespuestaEstudiante('');
+    setMostrarFeedback(false);
+    setEsRespuestaCorrecta(false);
+    setValidacionDetallada(null);
+    setRespuestaCorrectaBE(null);
+    setIntentosRestantes(3);
+    setPistasUsadas([]);
+    setPistaActual(null);
+  }, [esRespuestaCorrecta, problemaActual]);
 
-  // Si la sesión está completada, mostrar pantalla de resultados
+  const handleReintentar = useCallback(() => {
+    setMostrarFeedback(false);
+    setClearIncorrectTrigger((prev) => prev + 1);
+  }, []);
+
+  const handleLimpiar = useCallback(() => {
+    setRespuestaEstudiante('');
+    setLimpiarKey((prev) => prev + 1);
+  }, []);
+
+  const handleSolicitarPista = useCallback(
+    async (nivel: 1 | 2 | 3) => {
+      if (!sesionId || !problemaActual || cargandoPista) return;
+      setModalPistaAbierto(false);
+      setCargandoPista(true);
+      try {
+        const pista = await studentService.solicitarPista(sesionId, problemaActual.id, nivel);
+        setPistaActual({ nivel, contenido: pista.contenido });
+        setPistasUsadas((prev) => [...prev, nivel]);
+      } catch {
+        // Fallback genérico si el servicio de pistas falla
+        const fallback: Record<number, string> = {
+          1: 'Recuerda alinear los números por el punto decimal antes de operar.',
+          2: 'Comienza desde las unidades (derecha) y avanza hacia la izquierda.',
+          3: 'Revisa cuidadosamente cada paso de la operación.',
+        };
+        setPistaActual({ nivel, contenido: fallback[nivel] });
+        setPistasUsadas((prev) => [...prev, nivel]);
+      } finally {
+        setCargandoPista(false);
+      }
+    },
+    [sesionId, problemaActual, cargandoPista]
+  );
+
+  // ── Pantalla de carga ─────────────────────────────────────────────────────
+
+  if (cargandoSesion) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+        <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
+        <p className="text-muted-foreground">Preparando tu práctica...</p>
+      </div>
+    );
+  }
+
+  // ── Pantalla de error ─────────────────────────────────────────────────────
+
+  if (errorSesion) {
+    return (
+      <div className="max-w-md mx-auto mt-20 space-y-4">
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{errorSesion}</AlertDescription>
+        </Alert>
+        <Button onClick={() => navigate('/student/dashboard')} className="w-full">
+          Volver al inicio
+        </Button>
+      </div>
+    );
+  }
+
+  // ── Pantalla de resultados ────────────────────────────────────────────────
+
   if (sesionCompletada) {
-    const problemasCorrectos = resultadosProblemas.filter(Boolean).length;
+    const problemasCorrectos = resultadosProblemas.filter((r) => r.correcto).length;
     const operacionesPracticadas = Array.from(
-      new Set(problemas.map(p => p.operacion))
+      new Set(resultadosProblemas.map((r) => r.operacion))
     ) as Operacion[];
-
-    // Mock de datos de gamificación (TODO: obtener del backend)
-    const puntosGanados = problemasCorrectos * 50;
-    const medallasObtenidas: string[] = [];
-
-    if (problemasCorrectos === problemas.length) {
-      medallasObtenidas.push('Perfección Total');
-    }
-    if (problemasCorrectos >= problemas.length * 0.8) {
-      medallasObtenidas.push('Experto en Matemáticas');
-    }
 
     return (
       <SessionResults
         totalProblemas={problemas.length}
         problemasCorrectos={problemasCorrectos}
         operacionesPracticadas={operacionesPracticadas}
-        nivelActual={3} // TODO: obtener del perfil del estudiante
-        progresoNivel={65} // TODO: calcular basado en desempeño
+        nivelActual={problemaActual?.nivel_dificultad ?? 1}
+        progresoNivel={Math.round((problemasCorrectos / Math.max(problemas.length, 1)) * 100)}
         operacionesDominadas={
           problemasCorrectos === problemas.length ? operacionesPracticadas : []
         }
-        puntosGanados={puntosGanados}
-        medallasObtenidas={medallasObtenidas}
-        rachaActual={7} // TODO: obtener del perfil del estudiante
+        puntosGanados={recompensas?.puntos_ganados ?? 0}
+        medallasObtenidas={recompensas?.medallas_nuevas.map((m) => m.nombre) ?? []}
+        rachaActual={0}
         onContinuar={() => navigate('/student/dashboard')}
-        onVerDetalles={() => {
-          // TODO: Implementar vista detallada
-          console.log('Ver detalles');
-        }}
+        onVerDetalles={() => navigate('/student/progress')}
       />
     );
   }
 
+  if (!problemaActual) return null;
+
+  // ── Vista principal ───────────────────────────────────────────────────────
+
+  const enviando = submitMutation.isPending;
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* Header compacto con progreso */}
+      {/* Mensaje introductorio (solo al primer problema) */}
+      {indiceProblemActual === 0 && mensajeIntro && (
+        <Alert>
+          <AlertDescription>{mensajeIntro}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* Header con progreso */}
       <Card>
         <CardContent className="pt-6">
           <div className="flex items-center justify-between mb-2">
@@ -275,7 +409,8 @@ export function PracticePage() {
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            Te quedan <strong>{intentosRestantes}</strong> intento{intentosRestantes !== 1 ? 's' : ''}
+            Te quedan <strong>{intentosRestantes}</strong> intento
+            {intentosRestantes !== 1 ? 's' : ''}
           </AlertDescription>
         </Alert>
       )}
@@ -283,12 +418,7 @@ export function PracticePage() {
       {/* Problema */}
       <Card>
         <CardHeader>
-          <CardTitle>
-            {problemaActual.operacion === 'SUMA' && 'Suma'}
-            {problemaActual.operacion === 'RESTA' && 'Resta'}
-            {problemaActual.operacion === 'MULTIPLICACION' && 'Multiplicación'}
-            {problemaActual.operacion === 'DIVISION' && 'División'}
-          </CardTitle>
+          <CardTitle>{OPERACION_LABEL[problemaActual.operacion]}</CardTitle>
         </CardHeader>
         <CardContent className="flex justify-center">
           <ProblemGrid
@@ -296,7 +426,7 @@ export function PracticePage() {
             operacion={problemaActual.operacion}
             numero1={problemaActual.numero1}
             numero2={problemaActual.numero2}
-            resultado={problemaActual.resultado}
+            resultado={0}
             onAnswerChange={setRespuestaEstudiante}
             showFeedback={mostrarFeedback}
             clearIncorrectTrigger={clearIncorrectTrigger}
@@ -306,22 +436,28 @@ export function PracticePage() {
 
       {/* Acciones */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Pista */}
         <Button
           variant="outline"
           size="lg"
           onClick={() => setModalPistaAbierto(true)}
-          disabled={mostrarFeedback}
+          disabled={mostrarFeedback || cargandoPista || pistasUsadas.length >= 3}
         >
-          <Lightbulb className="h-5 w-5 mr-2" />
+          {cargandoPista ? (
+            <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+          ) : (
+            <Lightbulb className="h-5 w-5 mr-2" />
+          )}
           Pista ({pistasUsadas.length}/3)
         </Button>
 
+        {/* Limpiar */}
         <AlertDialog>
           <AlertDialogTrigger asChild>
             <Button
               variant="outline"
               size="lg"
-              disabled={mostrarFeedback || !respuestaEstudiante}
+              disabled={mostrarFeedback || !respuestaEstudiante || enviando}
             >
               <Eraser className="h-5 w-5 mr-2" />
               Limpiar
@@ -331,53 +467,44 @@ export function PracticePage() {
             <AlertDialogHeader>
               <AlertDialogTitle>¿Limpiar todas las respuestas?</AlertDialogTitle>
               <AlertDialogDescription>
-                Esto borrará todas las respuestas que has ingresado en este problema. Esta acción no se puede deshacer.
+                Esto borrará todas las respuestas que has ingresado. No se puede deshacer.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={handleLimpiar}>
-                Sí, limpiar
-              </AlertDialogAction>
+              <AlertDialogAction onClick={handleLimpiar}>Sí, limpiar</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
 
+        {/* Verificar / Siguiente / Reintentar */}
         {!mostrarFeedback ? (
           <Button
             size="lg"
             onClick={handleVerificar}
-            disabled={!respuestaEstudiante}
+            disabled={!respuestaEstudiante || enviando}
             className="bg-blue-600 hover:bg-blue-700"
           >
-            <Check className="h-5 w-5 mr-2" />
-            Confirmar Respuesta
+            {enviando ? (
+              <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+            ) : (
+              <Check className="h-5 w-5 mr-2" />
+            )}
+            {enviando ? 'Verificando...' : 'Confirmar Respuesta'}
           </Button>
         ) : esRespuestaCorrecta ? (
-          <Button
-            size="lg"
-            onClick={handleSiguiente}
-            className="bg-green-600 hover:bg-green-700"
-          >
+          <Button size="lg" onClick={handleSiguiente} className="bg-green-600 hover:bg-green-700">
             <ChevronRight className="h-5 w-5 mr-2" />
             Siguiente
           </Button>
         ) : intentosRestantes > 0 ? (
-          <Button
-            size="lg"
-            onClick={handleReintentar}
-            className="bg-orange-600 hover:bg-orange-700"
-          >
+          <Button size="lg" onClick={handleReintentar} className="bg-orange-600 hover:bg-orange-700">
             Reintentar ({intentosRestantes} restantes)
           </Button>
         ) : (
-          <Button
-            size="lg"
-            onClick={handleSiguiente}
-            variant="outline"
-          >
+          <Button size="lg" onClick={handleSiguiente} variant="outline">
             <ChevronRight className="h-5 w-5 mr-2" />
-            Saltar Problema
+            Siguiente Problema
           </Button>
         )}
       </div>
@@ -385,7 +512,13 @@ export function PracticePage() {
       {/* Feedback visual */}
       {mostrarFeedback && (
         <>
-          <Card className={esRespuestaCorrecta ? 'border-green-500 bg-green-50' : 'border-orange-500 bg-orange-50'}>
+          <Card
+            className={
+              esRespuestaCorrecta
+                ? 'border-green-500 bg-green-50'
+                : 'border-orange-500 bg-orange-50'
+            }
+          >
             <CardContent className="pt-6 text-center">
               {esRespuestaCorrecta ? (
                 <div className="space-y-2">
@@ -397,13 +530,20 @@ export function PracticePage() {
                 <div className="space-y-2">
                   <div className="text-6xl">💭</div>
                   <p className="text-2xl font-bold text-orange-700">Intenta de nuevo</p>
-                  <p className="text-gray-600">Revisa tu respuesta, te quedan {intentosRestantes} intentos</p>
+                  <p className="text-gray-600">
+                    Revisa tu respuesta, te quedan {intentosRestantes} intento
+                    {intentosRestantes !== 1 ? 's' : ''}
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-2">
                   <div className="text-6xl">📚</div>
                   <p className="text-2xl font-bold text-red-700">Sin intentos</p>
-                  <p className="text-gray-600">La respuesta correcta era: {problemaActual.resultado}</p>
+                  {respuestaCorrectaBE && (
+                    <p className="text-gray-600">
+                      La respuesta correcta era: <strong>{respuestaCorrectaBE}</strong>
+                    </p>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -421,16 +561,16 @@ export function PracticePage() {
         </>
       )}
 
-      {/* Modal para seleccionar nivel de pista */}
+      {/* Modal de pistas */}
       <HintModal
         open={modalPistaAbierto}
         onClose={() => setModalPistaAbierto(false)}
         onRequestHint={handleSolicitarPista}
-        puntosDisponibles={puntosDisponibles}
+        puntosDisponibles={0}
         pistasUsadas={pistasUsadas}
       />
 
-      {/* Display de pista solicitada */}
+      {/* Display de pista */}
       {pistaActual && (
         <HintDisplay
           open={!!pistaActual}

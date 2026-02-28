@@ -9,7 +9,8 @@ from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from decimal import Decimal
 
-from app.models.problem import Problema, ConfiguracionPractica, Intento, Operacion, TipoSesion
+from app.models.problem import Problema, Intento, Operacion, TipoSesion
+from app.models.practice_config import ConfiguracionPractica
 
 
 class ProblemRepository:
@@ -136,7 +137,8 @@ class ProblemRepository:
         es_correcto: bool,
         tiempo_resolucion: int,
         solicito_pista: bool,
-        tipo_sesion: TipoSesion
+        tipo_sesion: TipoSesion,
+        sesion_id: Optional[int] = None
     ) -> Intento:
         """Registra un intento de resolver un problema."""
         intento = Intento(
@@ -146,7 +148,8 @@ class ProblemRepository:
             es_correcto=es_correcto,
             tiempo_resolucion=tiempo_resolucion,
             solicito_pista=solicito_pista,
-            tipo_sesion=tipo_sesion
+            tipo_sesion=tipo_sesion,
+            sesion_id=sesion_id
         )
         
         self.db.add(intento)

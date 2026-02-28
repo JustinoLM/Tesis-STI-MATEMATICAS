@@ -81,8 +81,8 @@ class AdaptiveService:
     async def generar_diagnostico(self, estudiante_id: int) -> Dict:
         """
         Genera prueba diagnóstica de 8 problemas.
-        
-        2 problemas por operación: 1 nivel 1, 1 nivel 2
+
+        2 problemas por operación: 1 nivel 2, 1 nivel 3
         """
         # Verificar que no tenga diagnóstico previo
         diagnostico_previo = await self.adaptive_repo.get_diagnostico_by_estudiante(estudiante_id)
@@ -91,23 +91,13 @@ class AdaptiveService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Ya completaste el diagnóstico inicial"
             )
-        
+
         # Generar 8 problemas (2 por operación)
         problemas = []
         operaciones = [Operacion.SUMA, Operacion.RESTA, Operacion.MULTIPLICACION, Operacion.DIVISION]
-        
+
         for operacion in operaciones:
-            # Problema nivel 1
-            prob_n1 = await self.problem_service._generate_single_problem(
-                nivel=1,
-                operaciones=[operacion],
-                decimales_max=0,
-                rango_min=1,
-                rango_max=20
-            )
-            problemas.append(prob_n1)
-            
-            # Problema nivel 2
+            # Problema nivel 2 (decimales de 1 cifra, rango 1-50)
             prob_n2 = await self.problem_service._generate_single_problem(
                 nivel=2,
                 operaciones=[operacion],
@@ -116,6 +106,16 @@ class AdaptiveService:
                 rango_max=50
             )
             problemas.append(prob_n2)
+
+            # Problema nivel 3 (decimales de 2 cifras, rango 1-100)
+            prob_n3 = await self.problem_service._generate_single_problem(
+                nivel=3,
+                operaciones=[operacion],
+                decimales_max=2,
+                rango_min=1,
+                rango_max=100
+            )
+            problemas.append(prob_n3)
         
         # Crear registro de diagnóstico
         problemas_ids = [p.id for p in problemas]
@@ -311,15 +311,32 @@ class AdaptiveService:
         # Recalcular nivel actual
         perfil = await self._recalcular_nivel_actual(perfil)
         
-        # Determinar operaciones disponibles
-        ops_disponibles = self._get_operaciones_disponibles(perfil)
-        
+        _nombre_a_op = {
+            "suma": Operacion.SUMA,
+            "resta": Operacion.RESTA,
+            "multiplicacion": Operacion.MULTIPLICACION,
+            "division": Operacion.DIVISION,
+        }
+
+        # Aplicar ConfiguracionPractica del grupo (tiene prioridad sobre prerrequisitos adaptativos)
+        config_grupo = await self.adaptive_repo.get_config_practica_estudiante(estudiante_id)
+        if config_grupo and config_grupo.operaciones_permitidas:
+            # El profesor decide qué operaciones se practican — ignora prerrequisitos adaptativos
+            ops_disponibles = [
+                _nombre_a_op[nombre]
+                for nombre in config_grupo.operaciones_permitidas
+                if nombre in _nombre_a_op
+            ]
+        else:
+            # Sin config del profesor → prerrequisitos adaptativos normales
+            ops_disponibles = self._get_operaciones_disponibles(perfil)
+
         if not ops_disponibles:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No hay operaciones disponibles. Contacta al profesor."
             )
-        
+
         # Determinar operación más débil
         op_mas_debil = self._get_operacion_mas_debil(perfil, ops_disponibles)
         
@@ -437,32 +454,33 @@ class AdaptiveService:
     ) -> Dict[str, int]:
         """Distribuye problemas entre operaciones con énfasis en la más débil."""
         distribucion = {}
-        
-        if len(ops_disponibles) == 2:
-            # Solo suma y resta
+
+        if len(ops_disponibles) == 1:
+            # Solo una operación disponible (ej: profesor configuró solo división)
+            distribucion[ops_disponibles[0].value] = cantidad_total
+
+        elif len(ops_disponibles) == 2:
             distribucion[op_mas_debil.value] = int(cantidad_total * 0.7)
             otra = [op for op in ops_disponibles if op != op_mas_debil][0]
             distribucion[otra.value] = cantidad_total - distribucion[op_mas_debil.value]
-        
+
         elif len(ops_disponibles) == 3:
-            # Suma, resta, multiplicación
             distribucion[op_mas_debil.value] = int(cantidad_total * 0.5)
             restantes = cantidad_total - distribucion[op_mas_debil.value]
             otras = [op for op in ops_disponibles if op != op_mas_debil]
             distribucion[otras[0].value] = int(restantes * 0.6)
             distribucion[otras[1].value] = restantes - distribucion[otras[0].value]
-        
+
         else:
-            # Todas las operaciones
+            # 4 operaciones
             distribucion[op_mas_debil.value] = int(cantidad_total * 0.5)
             restantes = cantidad_total - distribucion[op_mas_debil.value]
             otras = [op for op in ops_disponibles if op != op_mas_debil]
-            
             parte = restantes // 3
             distribucion[otras[0].value] = parte
             distribucion[otras[1].value] = parte
             distribucion[otras[2].value] = restantes - (parte * 2)
-        
+
         return distribucion
     
     async def _generar_problemas_sesion(
@@ -915,6 +933,9 @@ class AdaptiveService:
         # Umbral de promoción
         umbral = perfil.umbral_promocion_personalizado or 10
         
+        # Obtener grupo y profesor asignado
+        grupo_info = await self.adaptive_repo.get_grupo_info(estudiante_id)
+
         return PerfilResponse(
             estudiante_id=estudiante_id,
             nivel_actual=perfil.nivel_actual,
@@ -936,5 +957,8 @@ class AdaptiveService:
             consecutivas_por_operacion=consecutivas,
             umbral_promocion=umbral,
             ultima_actividad=perfil.ultima_actividad,
-            dias_sin_practicar=perfil.dias_sin_practicar
+            dias_sin_practicar=perfil.dias_sin_practicar,
+            diagnostico_completado=perfil.diagnostico_completado,
+            grupo_nombre=grupo_info["grupo_nombre"] if grupo_info else None,
+            profesor_nombre=grupo_info["profesor_nombre"] if grupo_info else None,
         )

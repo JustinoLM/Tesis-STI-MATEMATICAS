@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.api.routers import auth, problems, adaptive, practices, gamification, hints_videos, teachers
+from app.api.routers import auth, problems, adaptive, practices, gamification, hints_videos, teachers, admin_organizations, challenges
 
 # Crear instancia de FastAPI
 app = FastAPI(
@@ -34,6 +34,8 @@ app.include_router(practices.router, prefix="/api/practices", tags=["Prácticas 
 app.include_router(gamification.router, prefix="/api/gamification", tags=["Gamificación"])
 app.include_router(hints_videos.router, prefix="/api", tags=["Pistas y Videos"])
 app.include_router(teachers.router, prefix="/api/teachers", tags=["Profesores"])
+app.include_router(admin_organizations.router, prefix="/api", tags=["Admin - Organizaciones"])
+app.include_router(challenges.router, prefix="/api/challenges", tags=["Desafíos"])
 
 
 # Health check endpoints

@@ -7,18 +7,41 @@
  *   3. Notificaciones      → toggle general + toggles individuales
  */
 
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Settings, Palette, Volume2, Bell, VolumeX, Check, Lock } from 'lucide-react';
+import { Settings, Palette, Volume2, Bell, VolumeX, Check, Lock, Save } from 'lucide-react';
 import { useThemeStore } from '@/store/themeStore';
+import { studentService, type ItemPoseido, type PersonalizacionRequest } from '@/services/studentService';
 import {
   TEMAS,
+  FONDOS,
   getFondosPorTema,
   getMusicasPorTema,
   COLORES,
-  FONDOS,
   type Desbloqueable,
 } from '@/types/shop';
+
+// ─── Helper: construir el request de personalización ─────────────────────────
+/**
+ * Dado el estado del store y el catálogo de BD, encuentra el ID numérico
+ * de cada item usando archivo_referencia como clave de mapeo.
+ */
+function buildPersonalizacionRequest(
+  temaArchivoRef: string,
+  fondoArchivoRef: string | null,
+  musicaArchivoRef: string | null,
+  todos: ItemPoseido[]
+): PersonalizacionRequest {
+  const findId = (ref: string | null) =>
+    ref ? (todos.find(i => i.archivo_referencia === ref)?.id ?? null) : null;
+
+  return {
+    tema_activo_id: findId(temaArchivoRef),
+    fondo_activo_id: findId(fondoArchivoRef),
+    musica_activa_id: findId(musicaArchivoRef),
+  };
+}
 
 // ---------------------------------------------------------------
 // Sub-componente: Tarjeta de selección genérica
@@ -149,16 +172,96 @@ export function SettingsPage() {
   // Músicas del tema activo
   const musicasDelTema = getMusicasPorTema(temaActivoId);
 
-  // TODO: En producción, obtener del perfil del estudiante via React Query
-  // para saber qué items tiene desbloqueados
-  const itemDesbloqueado = (_id: string) => true; // Simulado: todo desbloqueado para pruebas
+  // Catálogo de la BD: saber qué items posee el estudiante
+  const { data: catalogo } = useQuery({
+    queryKey: ['catalogo-tienda'],
+    queryFn: () => studentService.getCatalogo(),
+    staleTime: 1000 * 60 * 10,
+  });
+
+  // Lista plana de todos los items del catálogo (para mapear archivo_referencia → id numérico)
+  const todosCatalogo: ItemPoseido[] = catalogo
+    ? [
+        ...catalogo.temas,
+        ...catalogo.fondos,
+        ...catalogo.colores,
+        ...catalogo.musicas,
+        ...catalogo.efectos,
+      ]
+    : [];
+
+  const poseidos = new Set<string>();
+  for (const item of todosCatalogo) {
+    if (item.poseido && item.archivo_referencia) {
+      poseidos.add(item.archivo_referencia);
+    }
+  }
+
+  // Si el catálogo aún no cargó, mostrar todo como desbloqueado (fallback)
+  const itemDesbloqueado = (id: string) => catalogo ? poseidos.has(id) : true;
+
+  // ── Mutación de persistencia ─────────────────────────────────────────────
+  const { mutate: persistir, isPending: guardando } = useMutation({
+    mutationFn: (req: PersonalizacionRequest) => studentService.savePersonalizacion(req),
+    // Silencioso: los errores no interrumpen la UI local
+  });
+
+  /** Construye el request con el estado actual del store + el catálogo */
+  const buildAndSave = (
+    overrides: {
+      temaId?: string;
+      fondoId?: string | null;
+      musicaId?: string | null;
+    } = {}
+  ) => {
+    if (todosCatalogo.length === 0) return; // catálogo no cargado aún
+
+    const temaRef = overrides.temaId ?? temaActivoId;
+    const fondoRef =
+      overrides.fondoId !== undefined
+        ? overrides.fondoId
+        : (preferenciasPorTema[temaActivoId]?.fondoActivoId ?? null);
+    const musicaRef =
+      overrides.musicaId !== undefined
+        ? overrides.musicaId
+        : (preferenciasPorTema[temaActivoId]?.musicaActivaId ?? null);
+
+    const req = buildPersonalizacionRequest(temaRef, fondoRef, musicaRef, todosCatalogo);
+    persistir(req);
+  };
+
+  // ── Handlers que actualizan store Y persisten ─────────────────────────────
+  const handleSetTema = (temaId: string) => {
+    setTemaActivo(temaId);
+    // Después de cambiar tema, fondo y música se resetean a los del nuevo tema
+    // Usamos los overrides para enviar el estado correcto
+    buildAndSave({ temaId, fondoId: null, musicaId: null });
+  };
+
+  const handleSetFondo = (fondoId: string | null) => {
+    setFondoActivo(fondoId);
+    buildAndSave({ fondoId });
+  };
+
+  const handleSetMusica = (musicaId: string | null) => {
+    setMusicaActiva(musicaId);
+    buildAndSave({ musicaId });
+  };
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       {/* Header */}
-      <div className="flex items-center gap-2">
-        <Settings className="h-6 w-6" />
-        <h1 className="text-3xl font-bold">Configuración</h1>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Settings className="h-6 w-6" />
+          <h1 className="text-3xl font-bold">Configuración</h1>
+        </div>
+        {guardando && (
+          <span className="flex items-center gap-1.5 text-sm text-muted-foreground animate-pulse">
+            <Save className="h-4 w-4" />
+            Guardando...
+          </span>
+        )}
       </div>
 
       {/* ================================================================
@@ -194,7 +297,7 @@ export function SettingsPage() {
                     item={tema}
                     isActive={temaActivoId === tema.id}
                     isLocked={!desbloqueado}
-                    onClick={() => desbloqueado && setTemaActivo(tema.id)}
+                    onClick={() => desbloqueado && handleSetTema(tema.id)}
                     previewContent={
                       <div
                         className="w-full h-full flex flex-col items-center justify-center gap-1"
@@ -247,10 +350,10 @@ export function SettingsPage() {
             </div>
 
             {temaActivoId === 'tema-default' ? (
-              /* Tema clásico: solo fondos genéricos */
+              /* Tema clásico: fondos genéricos propios */
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                 <button
-                  onClick={() => setFondoActivo(null)}
+                  onClick={() => handleSetFondo(null)}
                   className={`
                     relative rounded-xl border-2 p-3 text-center transition-all
                     ${!prefsDelTema?.fondoActivoId
@@ -278,7 +381,7 @@ export function SettingsPage() {
                       item={fondo}
                       isActive={isActive}
                       isLocked={!desbloqueado}
-                      onClick={() => desbloqueado && setFondoActivo(fondo.id)}
+                      onClick={() => desbloqueado && handleSetFondo(fondo.id)}
                       previewContent={
                         fondo.config?.urlImagen ? (
                           <img src={fondo.config.urlImagen} alt={fondo.nombre} className="w-full h-full object-cover" />
@@ -295,7 +398,7 @@ export function SettingsPage() {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {/* Sin fondo */}
                 <button
-                  onClick={() => setFondoActivo(null)}
+                  onClick={() => handleSetFondo(null)}
                   className={`
                     relative rounded-xl border-2 p-3 text-center transition-all
                     ${!prefsDelTema?.fondoActivoId
@@ -330,7 +433,7 @@ export function SettingsPage() {
                   return (
                     <button
                       key={tipo}
-                      onClick={() => fondo && desbloqueado && setFondoActivo(fondo.id)}
+                      onClick={() => fondo && desbloqueado && handleSetFondo(fondo.id)}
                       disabled={!fondo || !desbloqueado}
                       className={`
                         relative rounded-xl border-2 p-3 text-left transition-all w-full
@@ -391,7 +494,7 @@ export function SettingsPage() {
                 </Badge>
               )}
             </div>
-            <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
               {/* Opción "Color del tema" */}
               <button
                 onClick={() => setColorActivo(null)}
@@ -525,7 +628,7 @@ export function SettingsPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                     {/* Opción "Sin música" */}
                     <button
-                      onClick={() => setMusicaActiva(null)}
+                      onClick={() => handleSetMusica(null)}
                       className={`
                         rounded-xl border-2 p-3 text-left transition-all
                         ${!prefsDelTema?.musicaActivaId
@@ -560,7 +663,7 @@ export function SettingsPage() {
                       return (
                         <button
                           key={tipo}
-                          onClick={() => musica && desbloqueado && setMusicaActiva(musica.id)}
+                          onClick={() => musica && desbloqueado && handleSetMusica(musica.id)}
                           disabled={!musica || !desbloqueado}
                           title={musica?.nombre ?? `${etiqueta} (no disponible)`}
                           className={`

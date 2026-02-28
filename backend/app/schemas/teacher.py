@@ -5,7 +5,6 @@ from typing import List, Optional, Dict, Any
 from decimal import Decimal
 from pydantic import BaseModel, Field
 
-from app.models.problem import Operacion
 from app.models.adaptive import TipoAlerta
 
 
@@ -70,11 +69,11 @@ class GrupoResumen(BaseModel):
 class ConfiguracionPracticaCreate(BaseModel):
     """Crear configuración de práctica."""
     grupo_id: int
-    operaciones_permitidas: List[Operacion]
+    operaciones_permitidas: List[str]   # "suma", "resta", "multiplicacion", "division"
     niveles_permitidos: List[int] = Field(default=[1, 2, 3, 4, 5])
     rango_min: Decimal = Field(default=0)
     rango_max: Decimal = Field(default=100)
-    decimales_maximos: int = Field(default=2, ge=1, le=3)
+    decimales_maximos: int = Field(default=2, ge=0, le=5)
     pistas_habilitadas: Dict[str, bool] = Field(
         default={"nivel_1": True, "nivel_2": True, "nivel_3": True}
     )

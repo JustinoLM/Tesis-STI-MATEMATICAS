@@ -13,6 +13,7 @@ from app.models.adaptive import (
     PerfilEstudiante,
     PruebaDiagnostica,
     SesionPractica,
+    EstadoSesion,
     AlertaEstudiante,
     EstadoDiagnostico,
     TipoAlerta,
@@ -283,7 +284,7 @@ class AdaptiveRepository:
     async def get_total_problemas_resueltos(self, estudiante_id: int) -> int:
         """Total de problemas resueltos (todas las sesiones completadas)."""
         from sqlalchemy import func, and_
-        
+
         result = await self.db.execute(
             select(func.sum(SesionPractica.cantidad_problemas))
             .where(
@@ -294,7 +295,92 @@ class AdaptiveRepository:
             )
         )
         return result.scalar() or 0
+
+    async def get_mejor_racha_perfectas(self, estudiante_id: int) -> int:
+        """Mejor racha histórica de sesiones perfectas (100% de aciertos) del estudiante."""
+        result = await self.db.execute(
+            select(SesionPractica.es_practica_perfecta)
+            .where(
+                and_(
+                    SesionPractica.estudiante_id == estudiante_id,
+                    SesionPractica.estado == EstadoSesion.COMPLETADA
+                )
+            )
+            .order_by(SesionPractica.fecha_inicio.asc())
+        )
+        sesiones = result.scalars().all()
+
+        racha_actual = 0
+        mejor_racha = 0
+        for es_perfecta in sesiones:
+            if es_perfecta:
+                racha_actual += 1
+                mejor_racha = max(mejor_racha, racha_actual)
+            else:
+                racha_actual = 0
+        return mejor_racha
     
+    async def get_grupo_info(self, estudiante_id: int) -> Optional[dict]:
+        """Obtiene el nombre del grupo y del profesor asignado al estudiante."""
+        from app.models.group import EstudianteGrupo, Grupo
+        from app.models.user import Profesor
+
+        result = await self.db.execute(
+            select(Grupo.nombre, Profesor.nombre_completo)
+            .join(EstudianteGrupo, EstudianteGrupo.grupo_id == Grupo.id)
+            .join(Profesor, Grupo.profesor_id == Profesor.id)
+            .where(
+                and_(
+                    EstudianteGrupo.estudiante_id == estudiante_id,
+                    EstudianteGrupo.activo == True,
+                    Grupo.activo == True,
+                )
+            )
+            .limit(1)
+        )
+        row = result.first()
+        if row:
+            return {"grupo_nombre": row[0], "profesor_nombre": row[1]}
+        return None
+
+    async def get_config_practica_estudiante(self, estudiante_id: int):
+        """Obtiene la ConfiguracionPractica activa del grupo del estudiante, o None."""
+        from app.models.group import EstudianteGrupo, Grupo
+        from app.models.practice_config import ConfiguracionPractica
+
+        # Primero obtener el grupo_id activo del estudiante
+        grupo_result = await self.db.execute(
+            select(Grupo.id)
+            .join(EstudianteGrupo, EstudianteGrupo.grupo_id == Grupo.id)
+            .where(
+                and_(
+                    EstudianteGrupo.estudiante_id == estudiante_id,
+                    EstudianteGrupo.activo == True,
+                    Grupo.activo == True,
+                )
+            )
+            .limit(1)
+        )
+        grupo_row = grupo_result.first()
+        if not grupo_row:
+            return None
+
+        grupo_id = grupo_row[0]
+
+        # Obtener la config activa más reciente
+        config_result = await self.db.execute(
+            select(ConfiguracionPractica)
+            .where(
+                and_(
+                    ConfiguracionPractica.grupo_id == grupo_id,
+                    ConfiguracionPractica.activa == True,
+                )
+            )
+            .order_by(ConfiguracionPractica.fecha_aplicacion.desc())
+            .limit(1)
+        )
+        return config_result.scalar_one_or_none()
+
     async def get_problema(self, problema_id: int) -> Optional[Problema]:
         """Obtiene un problema por ID."""
         result = await self.db.execute(

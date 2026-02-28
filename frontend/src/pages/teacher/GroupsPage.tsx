@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Plus, Users, TrendingUp, Clock, Settings } from 'lucide-react';
+import { Plus, Users, TrendingUp, Clock, Settings, Trash2, Check, X, Loader2 } from 'lucide-react';
 import { teacherService } from '@/services/teacherService';
 import { queryClient } from '@/lib/queryClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -26,6 +26,7 @@ export default function GroupsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [nombreGrupo, setNombreGrupo] = useState('');
   const [codigoGrupo, setCodigoGrupo] = useState('');
+  const [confirmarBorrarId, setConfirmarBorrarId] = useState<number | null>(null);
 
   // Obtener grupos
   const { data: grupos, isLoading } = useQuery({
@@ -41,6 +42,15 @@ export default function GroupsPage() {
       setIsDialogOpen(false);
       setNombreGrupo('');
       setCodigoGrupo('');
+    },
+  });
+
+  // Mutation para eliminar grupo
+  const eliminarGrupoMutation = useMutation({
+    mutationFn: (grupoId: number) => teacherService.eliminarGrupo(grupoId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teacher', 'groups'] });
+      setConfirmarBorrarId(null);
     },
   });
 
@@ -164,53 +174,85 @@ export default function GroupsPage() {
       ) : grupos && grupos.length > 0 ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {grupos.map((grupo) => (
-            <Link key={grupo.id} to={`/teacher/groups/${grupo.id}`}>
-              <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <CardTitle className="text-xl mb-2">{grupo.nombre}</CardTitle>
-                      <Badge variant="outline">{grupo.codigo_grupo}</Badge>
-                    </div>
+            <Card key={grupo.id} className="hover:shadow-lg transition-shadow h-full flex flex-col">
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <CardTitle className="text-xl mb-2">{grupo.nombre}</CardTitle>
+                    <Badge variant="outline">{grupo.codigo_grupo}</Badge>
+                  </div>
+                  <div className="flex items-center gap-1">
                     <Link
                       to={`/teacher/configuration?grupo=${grupo.id}`}
-                      onClick={(e) => e.stopPropagation()}
                     >
                       <Button variant="ghost" size="sm">
                         <Settings className="h-4 w-4" />
                       </Button>
                     </Link>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center gap-2 text-sm">
-                    <Users className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-medium">{grupo.cantidad_estudiantes}</span>
-                    <span className="text-muted-foreground">estudiantes</span>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-sm">
-                    <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-medium">
-                      {grupo.promedio_precision.toFixed(1)}%
-                    </span>
-                    <span className="text-muted-foreground">precisión promedio</span>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-sm">
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-medium">{grupo.problemas_resueltos_hoy}</span>
-                    <span className="text-muted-foreground">problemas hoy</span>
-                  </div>
-
-                  <div className="pt-3 border-t">
-                    <Button variant="outline" className="w-full" size="sm">
-                      Ver Detalle
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-400 hover:text-red-600 hover:bg-red-50"
+                      onClick={() => setConfirmarBorrarId(grupo.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
-                </CardContent>
-              </Card>
-            </Link>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3 flex-1 flex flex-col">
+                <div className="flex items-center gap-2 text-sm">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium">{grupo.cantidad_estudiantes}</span>
+                  <span className="text-muted-foreground">estudiantes</span>
+                </div>
+
+                <div className="flex items-center gap-2 text-sm">
+                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium">
+                    {grupo.promedio_precision.toFixed(1)}%
+                  </span>
+                  <span className="text-muted-foreground">precisión promedio</span>
+                </div>
+
+                <div className="flex items-center gap-2 text-sm">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium">{grupo.problemas_resueltos_hoy}</span>
+                  <span className="text-muted-foreground">problemas hoy</span>
+                </div>
+
+                <div className="pt-3 border-t mt-auto">
+                  {confirmarBorrarId === grupo.id ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-red-600 font-medium flex-1">¿Eliminar este grupo?</span>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={eliminarGrupoMutation.isPending}
+                        onClick={() => eliminarGrupoMutation.mutate(grupo.id)}
+                      >
+                        {eliminarGrupoMutation.isPending
+                          ? <Loader2 className="h-3 w-3 animate-spin" />
+                          : <Check className="h-3 w-3" />}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setConfirmarBorrarId(null)}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <Link to={`/teacher/groups/${grupo.id}`}>
+                      <Button variant="outline" className="w-full" size="sm">
+                        Ver Detalle
+                      </Button>
+                    </Link>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
       ) : (

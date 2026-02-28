@@ -1,10 +1,11 @@
 /**
  * Página de detalle de un grupo específico.
- * Muestra estadísticas detalladas y métricas del grupo.
+ * Muestra estadísticas, gestión de estudiantes (agregar/quitar) y borrar grupo.
  */
 
-import { useParams, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
   Users,
@@ -13,6 +14,13 @@ import {
   AlertTriangle,
   Award,
   BarChart3,
+  UserPlus,
+  UserMinus,
+  Search,
+  Trash2,
+  Check,
+  X,
+  Loader2,
 } from 'lucide-react';
 import { teacherService } from '@/services/teacherService';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,30 +31,87 @@ import { Progress } from '@/components/ui/progress';
 export default function GroupDetailPage() {
   const { id } = useParams<{ id: string }>();
   const grupoId = parseInt(id || '0');
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
-  // Obtener detalle del grupo
+  const [busqueda, setBusqueda] = useState('');
+  const [confirmarBorrar, setConfirmarBorrar] = useState(false);
+
+  // ── Queries ──────────────────────────────────────────────────────────────
   const { data: grupo, isLoading: loadingGrupo } = useQuery({
     queryKey: ['teacher', 'group', grupoId],
     queryFn: () => teacherService.getGrupoDetalle(grupoId),
     enabled: !!grupoId,
   });
 
-  // Obtener estadísticas del grupo
   const { data: stats, isLoading: loadingStats } = useQuery({
     queryKey: ['teacher', 'group', grupoId, 'statistics'],
     queryFn: () => teacherService.getEstadisticasGrupo(grupoId),
     enabled: !!grupoId,
   });
 
+  // Todos los estudiantes de la organización
+  const { data: estudiantesOrg = [] } = useQuery({
+    queryKey: ['teacher', 'estudiantes-org'],
+    queryFn: () => teacherService.getEstudiantesOrg(),
+    enabled: !!grupoId,
+  });
+
+  // ── Mutations ─────────────────────────────────────────────────────────────
+  const agregarMutation = useMutation({
+    mutationFn: (estudianteId: number) =>
+      teacherService.agregarEstudiante(grupoId, estudianteId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teacher', 'group', grupoId] });
+      queryClient.invalidateQueries({ queryKey: ['teacher', 'group', grupoId, 'statistics'] });
+    },
+  });
+
+  const quitarMutation = useMutation({
+    mutationFn: (estudianteId: number) =>
+      teacherService.removerEstudiante(grupoId, estudianteId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teacher', 'group', grupoId] });
+      queryClient.invalidateQueries({ queryKey: ['teacher', 'group', grupoId, 'statistics'] });
+    },
+  });
+
+  const eliminarGrupoMutation = useMutation({
+    mutationFn: () => teacherService.eliminarGrupo(grupoId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teacher', 'groups'] });
+      navigate('/teacher/groups');
+    },
+  });
+
+  // ── Derivados ─────────────────────────────────────────────────────────────
+  // IDs de estudiantes ya en el grupo
+  const idsEnGrupo = new Set(
+    (grupo?.estudiantes ?? []).map((e: any) => e.estudiante_id)
+  );
+
+  // Estudiantes disponibles (no están en el grupo) con filtro de búsqueda
+  const estudiantesDisponibles = estudiantesOrg.filter((e) => {
+    if (idsEnGrupo.has(e.id)) return false;
+    if (!busqueda) return true;
+    const q = busqueda.toLowerCase();
+    return (
+      e.nombre_completo.toLowerCase().includes(q) ||
+      e.codigo_estudiante.toLowerCase().includes(q)
+    );
+  });
+
+  // ── Carga ─────────────────────────────────────────────────────────────────
   if (loadingGrupo || loadingStats) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mr-2" />
         <p className="text-muted-foreground">Cargando información del grupo...</p>
       </div>
     );
   }
 
-  if (!grupo || !stats) {
+  if (!grupo) {
     return (
       <div className="space-y-6">
         <Link to="/teacher/groups">
@@ -66,8 +131,8 @@ export default function GroupDetailPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      {/* ── Header ─────────────────────────────────────────────────────── */}
+      <div className="flex items-start justify-between">
         <div className="space-y-1">
           <Link to="/teacher/groups">
             <Button variant="ghost" size="sm">
@@ -83,186 +148,333 @@ export default function GroupDetailPage() {
             </Badge>
           </div>
         </div>
-        <Link to={`/teacher/configuration?grupo=${grupoId}`}>
-          <Button variant="outline">Configurar Práctica</Button>
-        </Link>
+
+        {/* Botón borrar grupo */}
+        <div className="flex items-center gap-2">
+          <Link to={`/teacher/configuration?grupo=${grupoId}`}>
+            <Button variant="outline">Configurar Práctica</Button>
+          </Link>
+
+          {confirmarBorrar ? (
+            <div className="flex items-center gap-2 border border-red-200 bg-red-50 rounded-lg px-3 py-2">
+              <span className="text-sm text-red-700 font-medium">¿Eliminar grupo?</span>
+              <Button
+                size="sm"
+                variant="destructive"
+                disabled={eliminarGrupoMutation.isPending}
+                onClick={() => eliminarGrupoMutation.mutate()}
+              >
+                {eliminarGrupoMutation.isPending ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Check className="h-3 w-3" />
+                )}
+                Sí, eliminar
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setConfirmarBorrar(false)}
+              >
+                <X className="h-3 w-3" />
+                Cancelar
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-red-500 hover:text-red-700 hover:bg-red-50"
+              onClick={() => setConfirmarBorrar(true)}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Eliminar grupo
+            </Button>
+          )}
+        </div>
       </div>
 
-      {/* Estadísticas Principales */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Estudiantes</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.total_estudiantes}</div>
-            <p className="text-xs text-muted-foreground">
-              {stats.estudiantes_activos} activos
-            </p>
-          </CardContent>
-        </Card>
+      {/* ── Estadísticas Principales ────────────────────────────────────── */}
+      {stats && (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Estudiantes</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.total_estudiantes}</div>
+              <p className="text-xs text-muted-foreground">
+                {stats.estudiantes_activos} activos
+              </p>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Precisión Promedio</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.promedio_precision.toFixed(1)}%</div>
-            <p className="text-xs text-muted-foreground">Del grupo</p>
-          </CardContent>
-        </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Precisión Promedio</CardTitle>
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.promedio_precision.toFixed(1)}%</div>
+              <p className="text-xs text-muted-foreground">Del grupo</p>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Problemas Resueltos</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.problemas_resueltos_hoy}</div>
-            <p className="text-xs text-muted-foreground">
-              Hoy • {stats.problemas_resueltos_total} total
-            </p>
-          </CardContent>
-        </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Problemas Resueltos</CardTitle>
+              <Clock className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.problemas_resueltos_hoy}</div>
+              <p className="text-xs text-muted-foreground">
+                Hoy • {stats.problemas_resueltos_total} total
+              </p>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Velocidad Promedio</CardTitle>
-            <BarChart3 className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.promedio_velocidad.toFixed(1)}s</div>
-            <p className="text-xs text-muted-foreground">Por problema</p>
-          </CardContent>
-        </Card>
-      </div>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Velocidad Promedio</CardTitle>
+              <BarChart3 className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.promedio_velocidad.toFixed(1)}s</div>
+              <p className="text-xs text-muted-foreground">Por problema</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
-      {/* Alertas y Clasificación de Estudiantes */}
-      <div className="grid gap-4 md:grid-cols-3">
+      {/* ── Gestión de Estudiantes ──────────────────────────────────────── */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* Panel Izquierdo: Estudiantes en el grupo */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-red-600">
-              <AlertTriangle className="h-5 w-5" />
-              Rezagados
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Estudiantes en el grupo
+              <Badge variant="secondary" className="ml-auto">
+                {(grupo.estudiantes ?? []).length}
+              </Badge>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{stats.estudiantes_rezagados}</div>
-            <p className="text-sm text-muted-foreground mt-1">
-              Precisión menor a 50%
-            </p>
-            {stats.estudiantes_rezagados > 0 && (
-              <Link to="/teacher/alerts">
-                <Button variant="link" className="px-0 mt-2">
-                  Ver alertas
-                </Button>
-              </Link>
+            {(grupo.estudiantes ?? []).length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">
+                No hay estudiantes en este grupo aún.
+              </p>
+            ) : (
+              <ul className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                {(grupo.estudiantes as any[]).map((est) => (
+                  <li
+                    key={est.estudiante_id}
+                    className="flex items-center justify-between rounded-lg border px-3 py-2"
+                  >
+                    <div>
+                      <p className="text-sm font-medium">{est.nombre_completo}</p>
+                      <p className="text-xs text-muted-foreground">{est.codigo_estudiante}</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                      disabled={quitarMutation.isPending}
+                      onClick={() => quitarMutation.mutate(est.estudiante_id)}
+                    >
+                      {quitarMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <UserMinus className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
             )}
           </CardContent>
         </Card>
 
+        {/* Panel Derecho: Estudiantes disponibles para agregar */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-yellow-600">
-              <Clock className="h-5 w-5" />
-              Estancados
+            <CardTitle className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5" />
+              Agregar estudiantes
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats.estudiantes_estancados}</div>
-            <p className="text-sm text-muted-foreground mt-1">
-              Mucho tiempo en mismo nivel
-            </p>
-          </CardContent>
-        </Card>
+          <CardContent className="space-y-3">
+            {/* Buscador */}
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Buscar por nombre o código..."
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-green-600">
-              <Award className="h-5 w-5" />
-              Sobresalientes
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats.estudiantes_sobresalientes}</div>
-            <p className="text-sm text-muted-foreground mt-1">
-              Precisión mayor a 90%
-            </p>
+            {estudiantesOrg.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">
+                No hay estudiantes en tu organización.
+              </p>
+            ) : estudiantesDisponibles.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">
+                {busqueda
+                  ? 'No se encontraron estudiantes con esa búsqueda.'
+                  : 'Todos los estudiantes ya están en el grupo.'}
+              </p>
+            ) : (
+              <ul className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                {estudiantesDisponibles.map((est) => (
+                  <li
+                    key={est.id}
+                    className="flex items-center justify-between rounded-lg border px-3 py-2"
+                  >
+                    <div>
+                      <p className="text-sm font-medium">{est.nombre_completo}</p>
+                      <p className="text-xs text-muted-foreground">{est.codigo_estudiante}</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-green-600 hover:text-green-800 hover:bg-green-50"
+                      disabled={agregarMutation.isPending}
+                      onClick={() => agregarMutation.mutate(est.id)}
+                    >
+                      {agregarMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <UserPlus className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Distribución por Niveles */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Distribución por Niveles</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {[1, 2, 3, 4, 5].map((nivel) => {
-            const cantidad = stats.distribucion_niveles[nivel] || 0;
-            const porcentaje = stats.total_estudiantes
-              ? (cantidad / stats.total_estudiantes) * 100
-              : 0;
-
-            return (
-              <div key={nivel} className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium">Nivel {nivel}</span>
-                  <span className="text-muted-foreground">
-                    {cantidad} estudiantes ({porcentaje.toFixed(0)}%)
-                  </span>
-                </div>
-                <Progress value={porcentaje} className="h-2" />
-              </div>
-            );
-          })}
-        </CardContent>
-      </Card>
-
-      {/* Actividad del Grupo */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Actividad del Grupo</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Estudiantes Activos (últimos 7 días)</p>
-              <div className="flex items-center gap-2">
-                <div className="text-3xl font-bold">{stats.estudiantes_activos}</div>
-                <div className="text-sm text-muted-foreground">
-                  de {stats.total_estudiantes}
-                </div>
-              </div>
-              <Progress
-                value={
-                  (stats.estudiantes_activos / stats.total_estudiantes) * 100
-                }
-                className="h-2"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Estudiantes Inactivos</p>
-              <div className="flex items-center gap-2">
-                <div className="text-3xl font-bold">{stats.estudiantes_inactivos}</div>
-                <div className="text-sm text-muted-foreground">
-                  sin actividad reciente
-                </div>
-              </div>
-              {stats.estudiantes_inactivos > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  Considera contactar a estos estudiantes
-                </p>
+      {/* ── Alertas y Clasificación ─────────────────────────────────────── */}
+      {stats && (
+        <div className="grid gap-4 md:grid-cols-3">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-red-600">
+                <AlertTriangle className="h-5 w-5" />
+                Rezagados
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">{stats.estudiantes_rezagados}</div>
+              <p className="text-sm text-muted-foreground mt-1">Precisión menor a 50%</p>
+              {stats.estudiantes_rezagados > 0 && (
+                <Link to="/teacher/alerts">
+                  <Button variant="link" className="px-0 mt-2">Ver alertas</Button>
+                </Link>
               )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
 
-      {/* Acciones Rápidas */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-yellow-600">
+                <Clock className="h-5 w-5" />
+                Estancados
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">{stats.estudiantes_estancados}</div>
+              <p className="text-sm text-muted-foreground mt-1">Mucho tiempo en mismo nivel</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-green-600">
+                <Award className="h-5 w-5" />
+                Sobresalientes
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">{stats.estudiantes_sobresalientes}</div>
+              <p className="text-sm text-muted-foreground mt-1">Precisión mayor a 90%</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* ── Distribución por Niveles ────────────────────────────────────── */}
+      {stats && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Distribución por Niveles</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {[1, 2, 3, 4, 5].map((nivel) => {
+              const cantidad = stats.distribucion_niveles[nivel] || 0;
+              const porcentaje = stats.total_estudiantes
+                ? (cantidad / stats.total_estudiantes) * 100
+                : 0;
+
+              return (
+                <div key={nivel} className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-medium">Nivel {nivel}</span>
+                    <span className="text-muted-foreground">
+                      {cantidad} estudiantes ({porcentaje.toFixed(0)}%)
+                    </span>
+                  </div>
+                  <Progress value={porcentaje} className="h-2" />
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Actividad del Grupo ─────────────────────────────────────────── */}
+      {stats && stats.total_estudiantes > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Actividad del Grupo</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Estudiantes Activos (últimos 7 días)</p>
+                <div className="flex items-center gap-2">
+                  <div className="text-3xl font-bold">{stats.estudiantes_activos}</div>
+                  <div className="text-sm text-muted-foreground">de {stats.total_estudiantes}</div>
+                </div>
+                <Progress
+                  value={(stats.estudiantes_activos / stats.total_estudiantes) * 100}
+                  className="h-2"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Estudiantes Inactivos</p>
+                <div className="flex items-center gap-2">
+                  <div className="text-3xl font-bold">{stats.estudiantes_inactivos}</div>
+                  <div className="text-sm text-muted-foreground">sin actividad reciente</div>
+                </div>
+                {stats.estudiantes_inactivos > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Considera contactar a estos estudiantes
+                  </p>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Acciones Rápidas ────────────────────────────────────────────── */}
       <div className="grid gap-4 md:grid-cols-2">
         <Link to="/teacher/students">
           <Card className="hover:shadow-lg transition-shadow cursor-pointer">
@@ -271,10 +483,8 @@ export default function GroupDetailPage() {
                 <Users className="h-6 w-6 text-blue-600" />
               </div>
               <div>
-                <h3 className="font-semibold">Ver Estudiantes</h3>
-                <p className="text-sm text-muted-foreground">
-                  Buscar estudiantes del grupo
-                </p>
+                <h3 className="font-semibold">Ver Todos los Estudiantes</h3>
+                <p className="text-sm text-muted-foreground">Historial y progreso individual</p>
               </div>
             </CardContent>
           </Card>
@@ -288,9 +498,7 @@ export default function GroupDetailPage() {
               </div>
               <div>
                 <h3 className="font-semibold">Crear Desafío</h3>
-                <p className="text-sm text-muted-foreground">
-                  Nuevo desafío para este grupo
-                </p>
+                <p className="text-sm text-muted-foreground">Nuevo desafío para este grupo</p>
               </div>
             </CardContent>
           </Card>

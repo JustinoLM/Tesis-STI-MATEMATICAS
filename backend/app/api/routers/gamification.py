@@ -144,6 +144,27 @@ async def get_medallas(
     return await gamification_service.get_medallas_estudiante(current_student.id)
 
 
+@router.put("/medals/highlight/{medal_id}")
+async def set_medalla_destacada(
+    medal_id: int,
+    current_student: CurrentStudent,
+    gamification_service: GamificationServiceDep,
+):
+    """Establece la medalla destacada que se muestra en el dashboard."""
+    await gamification_service.set_medalla_destacada(current_student.id, medal_id)
+    return {"ok": True}
+
+
+@router.delete("/medals/highlight")
+async def quitar_medalla_destacada(
+    current_student: CurrentStudent,
+    gamification_service: GamificationServiceDep,
+):
+    """Quita la medalla destacada del dashboard."""
+    await gamification_service.set_medalla_destacada(current_student.id, None)
+    return {"ok": True}
+
+
 @router.get("/medals/progress", response_model=MedallasProgresoResponse)
 async def get_progreso_medallas(
     current_student: CurrentStudent,

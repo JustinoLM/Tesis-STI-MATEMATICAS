@@ -4,19 +4,20 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Estudiante, Profesor, TipoUsuario } from '@/types';
+import type { Usuario, TipoUsuario } from '@/types';
 
 interface AuthState {
   // Estado
   isAuthenticated: boolean;
-  user: Estudiante | Profesor | null;
+  user: Usuario | null;
   token: string | null;
-  
+  nombreCompleto: string;
+  codigo: string;
+
   // Acciones
-  login: (token: string, user: Estudiante | Profesor) => void;
+  login: (token: string, user: Usuario, nombreCompleto: string, codigo: string) => void;
   logout: () => void;
-  updateUser: (user: Estudiante | Profesor) => void;
-  
+
   // Helpers
   getUserRole: () => TipoUsuario | null;
   getUserName: () => string;
@@ -29,13 +30,17 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       user: null,
       token: null,
+      nombreCompleto: '',
+      codigo: '',
 
-      // Login: guardar token y usuario
-      login: (token, user) => {
+      // Login: guardar token, usuario y datos de presentación
+      login: (token, user, nombreCompleto, codigo) => {
         set({
           isAuthenticated: true,
           token,
           user,
+          nombreCompleto,
+          codigo,
         });
       },
 
@@ -45,12 +50,9 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: false,
           token: null,
           user: null,
+          nombreCompleto: '',
+          codigo: '',
         });
-      },
-
-      // Actualizar usuario (ej: después de editar perfil)
-      updateUser: (user) => {
-        set({ user });
       },
 
       // Obtener rol del usuario
@@ -61,23 +63,17 @@ export const useAuthStore = create<AuthState>()(
 
       // Obtener nombre del usuario
       getUserName: () => {
-        const { user } = get();
-        if (!user) return '';
-        
-        if (user.tipo_usuario === 'estudiante') {
-          return (user as Estudiante).nombre_completo;
-        } else {
-          return (user as Profesor).nombre_completo;
-        }
+        return get().nombreCompleto;
       },
     }),
     {
-      name: 'auth-storage', // nombre en localStorage
+      name: 'auth-storage',
       partialize: (state) => ({
-        // Solo persistir estos campos
         isAuthenticated: state.isAuthenticated,
         user: state.user,
         token: state.token,
+        nombreCompleto: state.nombreCompleto,
+        codigo: state.codigo,
       }),
     }
   )

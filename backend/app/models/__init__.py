@@ -4,6 +4,11 @@ Módulo de modelos SQLAlchemy.
 Centraliza todos los modelos para facilitar importaciones.
 """
 
+# Organization models (must be imported BEFORE user to resolve FK)
+from app.models.organization import (
+    Organizacion,
+)
+
 # User and authentication models
 from app.models.user import (
     TipoUsuario,
@@ -48,6 +53,12 @@ from app.models.gamification import (
 # Group models
 from app.models.group import (
     Grupo,
+    EstudianteGrupo,
+)
+
+# Hint (old video-pista system, referenced by Narrativa)
+from app.models.hint import (
+    VideoPista,
 )
 
 # Narrative models
@@ -60,12 +71,23 @@ from app.models.practice_config import (
     ConfiguracionPractica,
 )
 
-# Challenge models (if needed later)
-# from app.models.challenge import (
-#     Challenge,
-# )
+# Challenge models
+from app.models.challenge import (
+    DesafioGrupal,
+    GrupoDesafio,
+    DesafioIndividual,
+    EstudianteDesafioIndividual,
+)
+
+# Error / Buggy Model
+from app.models.error import (
+    ErrorComun,
+    EstudianteError,
+)
 
 __all__ = [
+    # Organization
+    "Organizacion",
     # User
     "TipoUsuario",
     "Usuario",
@@ -97,10 +119,21 @@ __all__ = [
     "TransaccionPuntos",
     # Group
     "Grupo",
+    "EstudianteGrupo",
+    # Hint (old video-pista system)
+    "VideoPista",
     # Narrative
     "Narrativa",
     # Practice Configuration
     "ConfiguracionPractica",
+    # Challenges
+    "DesafioGrupal",
+    "GrupoDesafio",
+    "DesafioIndividual",
+    "EstudianteDesafioIndividual",
+    # Error / Buggy Model
+    "ErrorComun",
+    "EstudianteError",
     # Hints and Videos
     "NivelPista",
     "TipoError",

@@ -13,7 +13,10 @@ export interface LoginRequest {
 export interface TokenResponse {
   access_token: string;
   token_type: string;
-  user: Estudiante | Profesor;
+  user: Usuario;
+  // Campos extras que evitan un segundo request al /me
+  nombre_completo: string;
+  codigo: string;
 }
 
 export interface Usuario {
@@ -57,6 +60,15 @@ export interface PerfilEstudiante {
   total_sesiones: number;
   ultima_actividad: string;
   dias_sin_practicar: number;
+  // Campos adicionales del PerfilResponse del backend
+  operaciones_disponibles: string[];
+  operaciones_bloqueadas: string[];
+  consecutivas_por_operacion: Record<string, number>;
+  umbral_promocion: number;
+  practicas_perfectas_consecutivas: number;
+  diagnostico_completado?: boolean;
+  grupo_nombre?: string;
+  profesor_nombre?: string;
 }
 
 export type TipoAlerta = 
@@ -192,6 +204,28 @@ export interface EstadisticasGrupo {
   estudiantes_rezagados: number;
   estudiantes_estancados: number;
   estudiantes_sobresalientes: number;
+}
+
+// Vista del desafío desde el lado del estudiante (endpoint /challenges/mis-desafios)
+export interface DesafioEstudiante {
+  id: number;
+  nombre: string;
+  descripcion?: string;
+  tipo: 'problemas_resueltos' | 'racha_consecutiva' | 'precision_promedio' | 'nivel_alcanzado';
+  objetivo_cantidad: number;
+  recompensa_texto?: string;
+  fecha_creacion: string;
+  fecha_limite?: string;
+  completado: boolean;
+  // Progreso del grupo del estudiante
+  grupo_id: number;
+  grupo_nombre: string;
+  progreso_actual: number;
+  porcentaje: number;
+  grupo_completado: boolean;
+  // Calculados en servidor
+  dias_restantes?: number;
+  esta_expirado: boolean;
 }
 
 export interface DesafioGrupal {

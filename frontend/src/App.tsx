@@ -13,9 +13,13 @@ import { ProtectedRoute } from '@/components/routing/ProtectedRoute';
 // Auth
 import { LoginPage } from '@/pages/auth/LoginPage';
 
+// Admin
+import { AdminPage } from '@/pages/admin/AdminPage';
+
 // Student
 import { StudentDashboard } from '@/pages/student/StudentDashboard';
 import { PracticePage } from '@/pages/student/PracticePage';
+import { DiagnosticPage } from '@/pages/student/DiagnosticPage';
 import { ShopPage } from '@/pages/student/ShopPage';
 import { InventoryPage } from '@/pages/student/InventoryPage';
 import { BadgesPage } from '@/pages/student/BadgesPage';
@@ -37,49 +41,14 @@ import CreateChallengePage from '@/pages/teacher/CreateChallengePage';
 import { ConfigurationPage } from '@/pages/teacher/ConfigurationPage';
 
 function App() {
-  // Zustand store
   const { isAuthenticated, getUserRole, getUserName, login, logout } = useAuthStore();
-  
+
   const userRole = getUserRole();
   const userName = getUserName();
 
   const handleLogin = async (codigo: string, password: string) => {
-    // Mock login para desarrollo (sin backend)
-    // TODO: Reemplazar con authService.login cuando backend esté disponible
-    
-    const isMockMode = true; // Cambiar a false cuando backend esté listo
-    
-    if (isMockMode) {
-      // Login mock
-      const isEstudiante = codigo.toUpperCase().startsWith('EST');
-      const mockUser = isEstudiante
-        ? {
-            id: 1,
-            tipo_usuario: 'estudiante' as const,
-            codigo_estudiante: codigo,
-            nombre_completo: 'Justin W.',
-            email: 'estudiante@test.com',
-            fecha_creacion: new Date().toISOString(),
-            activo: true,
-          }
-        : {
-            id: 1,
-            tipo_usuario: 'profesor' as const,
-            codigo_profesor: codigo,
-            nombre_completo: 'Profesor Demo',
-            email: 'profesor@test.com',
-            fecha_creacion: new Date().toISOString(),
-            activo: true,
-            institucion: 'Escuela Demo',
-          };
-      
-      login('mock-token-' + Date.now(), mockUser);
-      return;
-    }
-    
-    // Login real con backend
     const response = await authService.login({ codigo, password });
-    login(response.access_token, response.user);
+    login(response.access_token, response.user, response.nombre_completo, response.codigo);
   };
 
   const handleLogout = () => {
@@ -102,6 +71,30 @@ function App() {
             ) : (
               <LoginPage onLogin={handleLogin} />
             )
+          }
+        />
+
+        {/* Ruta pública: Admin (gestión de usuarios sin autenticación) */}
+        <Route path="/admin" element={<AdminPage />} />
+
+        {/* Ruta especial: Diagnóstico inicial sin sidebar */}
+        <Route
+          path="/student/diagnostic"
+          element={
+            <ProtectedRoute
+              isAuthenticated={isAuthenticated}
+              userRole={userRole || undefined}
+              requiredRole="estudiante"
+            >
+              <MainLayout
+                userName={userName}
+                userRole="estudiante"
+                onLogout={handleLogout}
+                hideSidebar={true}
+              >
+                <DiagnosticPage />
+              </MainLayout>
+            </ProtectedRoute>
           }
         />
 
@@ -205,7 +198,7 @@ function App() {
           }
         />
 
-        {/* 404: Redirect a login o dashboard */}
+        {/* 404 */}
         <Route
           path="*"
           element={

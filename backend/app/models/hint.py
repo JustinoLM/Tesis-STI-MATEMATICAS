@@ -41,35 +41,6 @@ class VideoPista(Base):
     
     # Relaciones
     narrativa = relationship("Narrativa", back_populates="videos_pista")
-    estudiantes_guardados = relationship("VideoGuardado", back_populates="video")
-    
+
     def __repr__(self):
         return f"<VideoPista(id={self.id}, signature={self.problema_signature}, nivel={self.nivel_estudiante})>"
-
-
-class VideoGuardado(Base):
-    """
-    Videos de pistas guardados por estudiantes.
-    
-    Permite que estudiantes accedan a videos útiles más tarde.
-    Tracking de uso para analytics.
-    
-    Relaciones:
-    - Pertenece a un Estudiante (N:1)
-    - Es un VideoPista específico (N:1)
-    """
-    __tablename__ = "video_guardado"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    estudiante_id = Column(Integer, ForeignKey("estudiante.id"), nullable=False, index=True)
-    video_id = Column(Integer, ForeignKey("video_pista.id"), nullable=False, index=True)
-    fecha_guardado = Column(DateTime, default=datetime.utcnow, nullable=False)
-    accesos = Column(Integer, nullable=False, default=0)
-    ultimo_acceso = Column(DateTime, nullable=True)
-    
-    # Relaciones
-    estudiante = relationship("Estudiante")
-    video = relationship("VideoPista", back_populates="estudiantes_guardados")
-    
-    def __repr__(self):
-        return f"<VideoGuardado(id={self.id}, estudiante_id={self.estudiante_id}, video_id={self.video_id})>"

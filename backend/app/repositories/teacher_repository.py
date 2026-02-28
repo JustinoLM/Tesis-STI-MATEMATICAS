@@ -8,9 +8,9 @@ from sqlalchemy.orm import selectinload
 
 from app.models.user import Profesor
 from app.models.group import Grupo, EstudianteGrupo
+from app.models.adaptive import PerfilEstudiante, AlertaEstudiante
 from app.models.practice_config import ConfiguracionPractica
 from app.models.challenge import DesafioGrupal, GrupoDesafio
-from app.models.adaptive import AlertaEstudiante, PerfilEstudiante
 from app.models.problem import Intento
 
 
@@ -55,17 +55,47 @@ class TeacherRepository:
         """Actualiza un grupo."""
         await self.db.flush()
         return grupo
+
+    async def eliminar_grupo(self, grupo: Grupo):
+        """Elimina un grupo y todas sus relaciones de estudiantes."""
+        # Primero eliminar relaciones estudiante-grupo
+        from sqlalchemy import delete as sa_delete
+        await self.db.execute(
+            sa_delete(EstudianteGrupo).where(EstudianteGrupo.grupo_id == grupo.id)
+        )
+        await self.db.delete(grupo)
+        await self.db.flush()
     
     async def agregar_estudiante_a_grupo(self, grupo_id: int, estudiante_id: int) -> EstudianteGrupo:
-        """Agrega estudiante a grupo."""
-        relacion = EstudianteGrupo(
-            estudiante_id=estudiante_id,
-            grupo_id=grupo_id
+        """Agrega estudiante a grupo. Si ya existía (soft-deleted), lo reactiva."""
+        result = await self.db.execute(
+            select(EstudianteGrupo).where(and_(
+                EstudianteGrupo.grupo_id == grupo_id,
+                EstudianteGrupo.estudiante_id == estudiante_id
+            ))
         )
-        self.db.add(relacion)
+        relacion = result.scalar_one_or_none()
+        if relacion:
+            relacion.activo = True
+        else:
+            relacion = EstudianteGrupo(
+                estudiante_id=estudiante_id,
+                grupo_id=grupo_id
+            )
+            self.db.add(relacion)
         await self.db.flush()
         return relacion
     
+    async def ensure_perfil_estudiante(self, estudiante_id: int):
+        """Crea PerfilEstudiante si el estudiante no tiene uno todavía."""
+        result = await self.db.execute(
+            select(PerfilEstudiante).where(PerfilEstudiante.estudiante_id == estudiante_id)
+        )
+        if not result.scalar_one_or_none():
+            perfil = PerfilEstudiante(estudiante_id=estudiante_id)
+            self.db.add(perfil)
+            await self.db.flush()
+
     async def remover_estudiante_de_grupo(self, grupo_id: int, estudiante_id: int):
         """Remueve estudiante de grupo."""
         await self.db.execute(

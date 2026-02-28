@@ -1,13 +1,12 @@
 """
-Modelos de problemas matemáticos, configuraciones y intentos.
+Modelos de problemas matemáticos e intentos.
 
 Problema: Ejercicios matemáticos generados.
-ConfiguracionPractica: Parámetros de generación por grupo.
 Intento: Respuestas de estudiantes a problemas.
 """
 
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Numeric, Boolean, DateTime, ForeignKey, Text, Enum, JSON
+from sqlalchemy import Column, Integer, String, Numeric, Boolean, DateTime, ForeignKey, Enum
 from sqlalchemy.orm import relationship
 import enum
 
@@ -27,36 +26,6 @@ class TipoSesion(str, enum.Enum):
     PRACTICA = "practica"
     DESAFIO = "desafio"
     REDENCION = "redencion"
-
-
-class ConfiguracionPractica(Base):
-    """
-    Configuración de parámetros de generación de problemas por grupo.
-    
-    Define qué operaciones, niveles y rangos usar para un grupo específico.
-    
-    Relaciones:
-    - Pertenece a un Grupo (N:1)
-    - Creada por un Profesor (N:1)
-    """
-    __tablename__ = "configuracion_practica"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    grupo_id = Column(Integer, ForeignKey("grupo.id"), nullable=False, index=True)
-    nivel_dificultad = Column(Integer, nullable=False)  # 1-5
-    operaciones_permitidas = Column(JSON, nullable=False)  # ['+', '-', '×', '÷']
-    decimales_maximos = Column(Integer, nullable=False)  # 1-3
-    rango_min = Column(Numeric(10, 3), nullable=False)
-    rango_max = Column(Numeric(10, 3), nullable=False)
-    fecha_aplicacion = Column(DateTime, default=datetime.utcnow, nullable=False)
-    aplicada_por = Column(Integer, ForeignKey("profesor.id"), nullable=False, index=True)
-    
-    # Relaciones
-    grupo = relationship("Grupo", back_populates="configuraciones_practica")
-    aplicada_por_profesor = relationship("Profesor", back_populates="configuraciones")
-    
-    def __repr__(self):
-        return f"<ConfiguracionPractica(id={self.id}, grupo_id={self.grupo_id}, nivel={self.nivel_dificultad})>"
 
 
 class Problema(Base):

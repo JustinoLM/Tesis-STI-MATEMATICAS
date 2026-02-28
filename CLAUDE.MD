@@ -115,6 +115,13 @@ frontend/src/
 - **Estudiantes:** Práctica, perfil, tienda, desafíos
 - **Profesores:** Dashboard, gestión de grupos, reportes
 
+## Flujo de Pruebas
+
+**NO usar seed data.** El sistema se prueba desde cero de forma manual:
+- Los usuarios, grupos y datos se crean directamente desde la UI o el panel de admin (`/admin`)
+- `backend/scripts/seed_data.py` existe pero **no se usa en el flujo actual**
+- Las migraciones se siguen aplicando con `alembic upgrade head` cuando hay cambios de esquema
+
 ## Comandos Importantes
 
 ### Backend
@@ -240,5 +247,5 @@ Este es un proyecto **educativo** (tesis), por lo tanto:
 
 ---
 
-**Última Actualización:** 2026-01-17
+**Última Actualización:** 2026-02-28
 **Versión:** Capítulo 4 - Secciones 4.3.4, 4.3.5, 4.4.1, 4.4.2 completadas

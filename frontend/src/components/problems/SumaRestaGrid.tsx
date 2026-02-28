@@ -34,14 +34,35 @@ export function SumaRestaGrid({
     const decimal2 = str2.includes('.') ? str2.split('.')[1].length : 0;
     const maxDecimales = Math.max(decimal1, decimal2);
 
-    const aligned1 = decimal1 < maxDecimales ? str1 + '0'.repeat(maxDecimales - decimal1) : str1;
-    const aligned2 = decimal2 < maxDecimales ? str2 + '0'.repeat(maxDecimales - decimal2) : str2;
+    const aligned1 =
+      decimal1 < maxDecimales
+        ? decimal1 === 0
+          ? str1 + '.' + '0'.repeat(maxDecimales)
+          : str1 + '0'.repeat(maxDecimales - decimal1)
+        : str1;
+    const aligned2 =
+      decimal2 < maxDecimales
+        ? decimal2 === 0
+          ? str2 + '.' + '0'.repeat(maxDecimales)
+          : str2 + '0'.repeat(maxDecimales - decimal2)
+        : str2;
 
     return { aligned1, aligned2 };
   };
 
   const { aligned1, aligned2 } = alinearDecimales(numero1, numero2);
-  const resultadoStr = resultado.toString();
+
+  // Calcular el resultado real para determinar cuántas casillas mostrar.
+  // El prop `resultado` llega como 0 desde PracticePage, así que lo calculamos aquí.
+  const calcularResultadoStr = () => {
+    const decimales = aligned1.includes('.')
+      ? aligned1.split('.')[1].length
+      : 0;
+    const r = operacion === 'SUMA' ? numero1 + numero2 : numero1 - numero2;
+    return decimales > 0 ? r.toFixed(decimales) : Math.round(r).toString();
+  };
+
+  const resultadoStr = calcularResultadoStr();
   const maxLength = Math.max(aligned1.length, aligned2.length, resultadoStr.length);
 
   // Construir valores esperados para validación
@@ -68,10 +89,9 @@ export function SumaRestaGrid({
   useEffect(() => {
     const resultadoFinal = Object.keys(digitosRespuesta)
       .filter(key => key.startsWith('resultado-'))
-      .sort()
+      .sort((a, b) => parseInt(a.split('-')[1]) - parseInt(b.split('-')[1]))
       .map(key => digitosRespuesta[key])
       .join('');
-
     onAnswerChange(resultadoFinal);
   }, [digitosRespuesta, onAnswerChange]);
 

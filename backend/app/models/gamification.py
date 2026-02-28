@@ -44,7 +44,7 @@ class Desbloqueable(Base):
     __tablename__ = "desbloqueable"
     
     id = Column(Integer, primary_key=True, index=True)
-    categoria = Column(Enum(CategoriaDesbloqueable), nullable=False)
+    categoria = Column(Enum(CategoriaDesbloqueable, values_callable=lambda x: [e.value for e in x]), nullable=False)
     nombre = Column(String(100), nullable=False)
     descripcion = Column(Text, nullable=True)
     precio_puntos = Column(Integer, nullable=False)
@@ -89,8 +89,9 @@ class EstudianteDesbloqueable(Base):
     puntos_gastados = Column(Integer, nullable=False)  # Precio al momento de compra
     
     # Relaciones
+    estudiante = relationship("Estudiante", back_populates="desbloqueables")
     desbloqueable = relationship("Desbloqueable", back_populates="estudiantes_que_lo_poseen")
-    
+
     def __repr__(self):
         return f"<EstudianteDesbloqueable estudiante={self.estudiante_id} item={self.desbloqueable_id}>"
 
@@ -117,7 +118,10 @@ class PersonalizacionEstudiante(Base):
     
     # Efectos activos (lista de IDs de desbloqueables tipo EFECTO)
     efectos_activos = Column(JSON, default=list)
-    
+
+    # Medalla destacada en el dashboard
+    medalla_destacada_id = Column(Integer, ForeignKey("medalla.id"), nullable=True)
+
     # Metadata
     fecha_actualizacion = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -134,7 +138,7 @@ class Medalla(Base):
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(100), nullable=False)
     descripcion = Column(Text, nullable=False)
-    categoria = Column(Enum(CategoriaMedalla), nullable=False)
+    categoria = Column(Enum(CategoriaMedalla, values_callable=lambda x: [e.value for e in x]), nullable=False)
     
     # Criterio de obtención (JSON con condiciones)
     # Ejemplo: {"tipo": "nivel", "operacion": "suma", "nivel": 3}
@@ -146,7 +150,10 @@ class Medalla(Base):
     
     # Para ordenar en la galería
     orden = Column(Integer, default=0)
-    
+
+    # Si es True, el nombre/descripción se ocultan hasta que el estudiante la gana
+    es_secreta = Column(Boolean, default=False)
+
     # Metadata
     fecha_creacion = Column(DateTime, default=datetime.utcnow)
     activa = Column(Boolean, default=True)
@@ -178,8 +185,9 @@ class EstudianteMedalla(Base):
     notificada = Column(Boolean, default=False)
     
     # Relaciones
+    estudiante = relationship("Estudiante", back_populates="medallas")
     medalla = relationship("Medalla", back_populates="estudiantes_que_la_ganaron")
-    
+
     def __repr__(self):
         return f"<EstudianteMedalla estudiante={self.estudiante_id} medalla={self.medalla_id}>"
 
@@ -195,7 +203,7 @@ class TransaccionPuntos(Base):
     id = Column(Integer, primary_key=True, index=True)
     estudiante_id = Column(Integer, ForeignKey("estudiante.id"), nullable=False)
     
-    tipo = Column(Enum(TipoTransaccion), nullable=False)
+    tipo = Column(Enum(TipoTransaccion, values_callable=lambda x: [e.value for e in x]), nullable=False)
     cantidad = Column(Integer, nullable=False)
     concepto = Column(String(255), nullable=False)
     

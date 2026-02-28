@@ -105,7 +105,7 @@ export function DigitRow({
         const value = digitosRespuesta[key] || '';
         const isFocused = focusedKey === key;
 
-        // Punto decimal - ahora es editable
+        // Punto decimal - editable
         if (char === '.') {
           return (
             <DigitInput

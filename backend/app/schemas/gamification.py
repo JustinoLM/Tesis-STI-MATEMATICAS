@@ -156,17 +156,18 @@ class MedallaBase(BaseModel):
     descripcion: str
     categoria: str
     imagen_url: Optional[str]
+    es_secreta: bool = False
 
 
 class MedallaResponse(MedallaBase):
     """Medalla con información de obtención."""
     id: int
     orden: int
-    
+
     # Información de obtención
     obtenida: bool = False
     fecha_obtencion: Optional[datetime] = None
-    
+
     model_config = {"from_attributes": True}
 
 
@@ -194,6 +195,7 @@ class MedallasResponse(BaseModel):
     total_medallas: int
     medallas_obtenidas: int
     medallas: List[MedallaResponse]
+    medalla_destacada_id: Optional[int] = None
 
 
 class MedallasProgresoResponse(BaseModel):

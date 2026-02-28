@@ -1,12 +1,13 @@
 /**
  * Página de búsqueda y listado de estudiantes.
- * Permite buscar estudiantes por nombre o código y ver su información básica.
+ * Muestra todos los estudiantes de la misma organización del profesor.
+ * Permite buscar por nombre o código de estudiante.
  */
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Search, GraduationCap, TrendingUp, Users, Eye } from 'lucide-react';
+import { Search, GraduationCap, Users, Eye, Building2, UserX } from 'lucide-react';
 import { teacherService } from '@/services/teacherService';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -16,29 +17,23 @@ import { Badge } from '@/components/ui/badge';
 export default function StudentsPage() {
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Por ahora, obtenemos todos los grupos para mostrar estudiantes
-  const { data: grupos } = useQuery({
-    queryKey: ['teacher', 'groups'],
-    queryFn: () => teacherService.getGrupos(),
+  // Obtener estudiantes de la organización del profesor
+  const { data: estudiantes, isLoading, isError } = useQuery({
+    queryKey: ['teacher', 'students'],
+    queryFn: () => teacherService.getEstudiantesOrg(),
+    staleTime: 2 * 60 * 1000, // 2 minutos
   });
 
-  // Obtener todos los estudiantes de todos los grupos
-  const allStudents = grupos?.flatMap((grupo) =>
-    grupo.estudiantes?.map((est) => ({
-      ...est,
-      grupo_nombre: grupo.nombre,
-      grupo_id: grupo.id,
-    })) || []
-  ) || [];
-
-  // Filtrar estudiantes según búsqueda
+  // Filtro local por nombre o código
   const filteredStudents = searchQuery
-    ? allStudents.filter(
-        (student) =>
-          student.nombre_completo.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          student.codigo_estudiante.toLowerCase().includes(searchQuery.toLowerCase())
+    ? (estudiantes ?? []).filter(
+        (e) =>
+          e.nombre_completo.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          e.codigo_estudiante.toLowerCase().includes(searchQuery.toLowerCase())
       )
-    : allStudents;
+    : (estudiantes ?? []);
+
+  const totalActivos = estudiantes?.filter((e) => e.activo).length ?? 0;
 
   return (
     <div className="space-y-6">
@@ -46,7 +41,7 @@ export default function StudentsPage() {
       <div>
         <h1 className="text-3xl font-bold">Estudiantes</h1>
         <p className="text-muted-foreground">
-          Busca y monitorea el progreso de tus estudiantes
+          Estudiantes de tu organización que puedes asignar a grupos
         </p>
       </div>
 
@@ -63,9 +58,11 @@ export default function StudentsPage() {
                 className="pl-10"
               />
             </div>
-            <Button variant="outline" onClick={() => setSearchQuery('')}>
-              Limpiar
-            </Button>
+            {searchQuery && (
+              <Button variant="outline" onClick={() => setSearchQuery('')}>
+                Limpiar
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -74,36 +71,38 @@ export default function StudentsPage() {
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Estudiantes</CardTitle>
-            <GraduationCap className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Total en Organización</CardTitle>
+            <Building2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{allStudents.length}</div>
-            <p className="text-xs text-muted-foreground">En todos los grupos</p>
+            <div className="text-2xl font-bold">{estudiantes?.length ?? 0}</div>
+            <p className="text-xs text-muted-foreground">Estudiantes registrados</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Resultados</CardTitle>
+            <CardTitle className="text-sm font-medium">Activos</CardTitle>
+            <GraduationCap className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalActivos}</div>
+            <p className="text-xs text-muted-foreground">Con cuenta activa</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              {searchQuery ? 'Resultados' : 'Mostrando'}
+            </CardTitle>
             <Search className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{filteredStudents.length}</div>
             <p className="text-xs text-muted-foreground">
-              {searchQuery ? 'Coincidencias' : 'Mostrando todos'}
+              {searchQuery ? 'Coincidencias encontradas' : 'Todos los estudiantes'}
             </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Grupos</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{grupos?.length || 0}</div>
-            <p className="text-xs text-muted-foreground">Grupos activos</p>
           </CardContent>
         </Card>
       </div>
@@ -112,20 +111,36 @@ export default function StudentsPage() {
       <Card>
         <CardHeader>
           <CardTitle>
-            {searchQuery ? 'Resultados de Búsqueda' : 'Todos los Estudiantes'}
+            {searchQuery
+              ? `Resultados para "${searchQuery}"`
+              : 'Todos los Estudiantes'}
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {filteredStudents.length === 0 ? (
+          {isLoading ? (
+            <div className="text-center py-12 text-muted-foreground">
+              Cargando estudiantes...
+            </div>
+          ) : isError ? (
+            <div className="text-center py-12">
+              <UserX className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-semibold mb-2">Error al cargar estudiantes</h3>
+              <p className="text-muted-foreground">
+                Verifica tu conexión e intenta de nuevo.
+              </p>
+            </div>
+          ) : filteredStudents.length === 0 ? (
             <div className="text-center py-12">
               <GraduationCap className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
               <h3 className="text-lg font-semibold mb-2">
-                {searchQuery ? 'No se encontraron resultados' : 'No hay estudiantes'}
+                {searchQuery
+                  ? 'No se encontraron resultados'
+                  : 'No hay estudiantes en tu organización'}
               </h3>
               <p className="text-muted-foreground">
                 {searchQuery
                   ? 'Intenta con otro término de búsqueda'
-                  : 'Los estudiantes aparecerán aquí cuando se unan a tus grupos'}
+                  : 'Pide al administrador que asigne estudiantes a tu organización'}
               </p>
             </div>
           ) : (
@@ -135,16 +150,13 @@ export default function StudentsPage() {
                   <tr>
                     <th className="px-4 py-3 text-left text-sm font-semibold">Código</th>
                     <th className="px-4 py-3 text-left text-sm font-semibold">Nombre</th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold">Grupo</th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold">Nivel</th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold">Precisión</th>
                     <th className="px-4 py-3 text-left text-sm font-semibold">Estado</th>
                     <th className="px-4 py-3 text-right text-sm font-semibold">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
                   {filteredStudents.map((student) => (
-                    <tr key={`${student.grupo_id}-${student.estudiante_id}`} className="hover:bg-muted/50">
+                    <tr key={student.id} className="hover:bg-muted/50">
                       <td className="px-4 py-3">
                         <code className="text-xs bg-muted px-2 py-1 rounded">
                           {student.codigo_estudiante}
@@ -152,38 +164,12 @@ export default function StudentsPage() {
                       </td>
                       <td className="px-4 py-3 font-medium">{student.nombre_completo}</td>
                       <td className="px-4 py-3">
-                        <Link to={`/teacher/groups/${student.grupo_id}`}>
-                          <Badge variant="outline" className="cursor-pointer hover:bg-muted">
-                            {student.grupo_nombre}
-                          </Badge>
-                        </Link>
-                      </td>
-                      <td className="px-4 py-3">
-                        <Badge variant="secondary">Nivel {student.nivel_actual}</Badge>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <TrendingUp
-                            className={`h-4 w-4 ${
-                              student.precision_ultimos_15 >= 80
-                                ? 'text-green-500'
-                                : student.precision_ultimos_15 >= 60
-                                ? 'text-yellow-500'
-                                : 'text-red-500'
-                            }`}
-                          />
-                          <span className="font-medium">
-                            {student.precision_ultimos_15.toFixed(1)}%
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
                         <Badge variant={student.activo ? 'default' : 'secondary'}>
                           {student.activo ? 'Activo' : 'Inactivo'}
                         </Badge>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <Link to={`/teacher/students/${student.estudiante_id}`}>
+                        <Link to={`/teacher/students/${student.id}`}>
                           <Button variant="ghost" size="sm">
                             <Eye className="h-4 w-4 mr-2" />
                             Ver Detalle
@@ -198,6 +184,23 @@ export default function StudentsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Nota informativa */}
+      {!isLoading && !isError && (estudiantes?.length ?? 0) > 0 && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-start gap-3">
+              <Users className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+              <div className="text-sm text-blue-800">
+                <span className="font-medium">¿Cómo agregar estudiantes a un grupo?</span>
+                <span className="text-blue-700">
+                  {' '}Ve a la página de un grupo específico y usa el botón "Agregar Estudiante" para seleccionar estudiantes de esta lista.
+                </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

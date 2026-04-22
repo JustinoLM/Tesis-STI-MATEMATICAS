@@ -1,12 +1,15 @@
 /**
- * Prueba diagnóstica inicial del estudiante — Sección 4.4.3
+ * Post-test final del estudiante.
+ *
+ * Mismo formato que el diagnóstico inicial (8 problemas, 2 por operación,
+ * niveles 2 y 3), pero los resultados NO cambian el perfil adaptativo.
+ * Al finalizar se muestra una comparación pre-test → post-test.
  *
  * Flujo:
- * 1. Al montar → POST /adaptive/diagnostic/start → 8 problemas (2 por operación)
- * 2. Mostrar problemas uno a uno; el estudiante escribe su respuesta y avanza
- *    (sin feedback correcto/incorrecto — es una evaluación, no una práctica)
- * 3. Al terminar → POST /adaptive/diagnostic/submit → niveles asignados
- * 4. Mostrar resultados → botón para ir a la práctica
+ * 1. Montar → POST /adaptive/post-test/start → 8 problemas
+ * 2. Resolver uno por uno (sin feedback inmediato)
+ * 3. Finalizar → POST /adaptive/post-test/submit → resultados + comparación
+ * 4. Pantalla de resultados con comparación
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -15,7 +18,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ClipboardList, ChevronRight, Loader2, AlertCircle, BookOpen, CheckCircle2 } from 'lucide-react';
+import {
+  ClipboardCheck, ChevronRight, Loader2, AlertCircle,
+  TrendingUp, TrendingDown, Minus,
+} from 'lucide-react';
 import { ProblemGrid } from '@/components/problems';
 import { VirtualKeyboard } from '@/components/problems/VirtualKeyboard';
 import type { Operacion } from '@/types';
@@ -32,43 +38,33 @@ interface ProblemaUI {
   cantidad_decimales: number;
 }
 
-interface ResultadoDiagnostico {
+interface PostTestResultado {
   perfecto: boolean;
-  nivel_suma: number;
-  nivel_resta: number;
-  nivel_multiplicacion: number;
-  nivel_division: number;
-  nivel_actual: number;
+  total_correctos: number;
   correctos_por_operacion: Record<string, number>;
+  tiempos_por_operacion: Record<string, number>;
+  pre_correctos_por_operacion: Record<string, number> | null;
+  pre_nivel_actual: number | null;
   mensaje: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const OPERACION_MAP: Record<string, Operacion> = {
-  '+': 'SUMA',
-  '-': 'RESTA',
-  '×': 'MULTIPLICACION',
-  '÷': 'DIVISION',
-  SUMA: 'SUMA',
-  RESTA: 'RESTA',
-  MULTIPLICACION: 'MULTIPLICACION',
-  DIVISION: 'DIVISION',
+  '+': 'SUMA', '-': 'RESTA', '×': 'MULTIPLICACION', '÷': 'DIVISION',
+  SUMA: 'SUMA', RESTA: 'RESTA', MULTIPLICACION: 'MULTIPLICACION', DIVISION: 'DIVISION',
 };
 
 const OPERACION_LABEL: Record<Operacion, string> = {
-  SUMA: 'Suma',
-  RESTA: 'Resta',
-  MULTIPLICACION: 'Multiplicación',
-  DIVISION: 'División',
+  SUMA: 'Suma', RESTA: 'Resta', MULTIPLICACION: 'Multiplicación', DIVISION: 'División',
+};
+
+const OP_KEY_LABEL: Record<string, string> = {
+  suma: 'Suma', resta: 'Resta', multiplicacion: 'Multiplicación', division: 'División',
 };
 
 const NIVEL_EMOJI: Record<number, string> = {
-  1: '🌱',
-  2: '🌿',
-  3: '🌳',
-  4: '🏆',
-  5: '⭐',
+  1: '🌱', 2: '🌿', 3: '🌳', 4: '🏆', 5: '⭐',
 };
 
 function mapearProblema(be: ProblemaBE): ProblemaUI {
@@ -85,18 +81,14 @@ function mapearProblema(be: ProblemaBE): ProblemaUI {
 
 // ─── Sub-componente: Pantalla de resultados ───────────────────────────────────
 
-interface ResultadosProps {
-  resultado: ResultadoDiagnostico;
-  onComenzarPractica: () => void;
-}
-
-function PantallaResultados({ resultado, onComenzarPractica }: ResultadosProps) {
-  const operaciones: { key: keyof ResultadoDiagnostico; label: string; nivel: number; correctos: number }[] = [
-    { key: 'nivel_suma',           label: 'Suma',           nivel: resultado.nivel_suma,           correctos: resultado.correctos_por_operacion['suma'] ?? 0 },
-    { key: 'nivel_resta',          label: 'Resta',          nivel: resultado.nivel_resta,          correctos: resultado.correctos_por_operacion['resta'] ?? 0 },
-    { key: 'nivel_multiplicacion', label: 'Multiplicación', nivel: resultado.nivel_multiplicacion, correctos: resultado.correctos_por_operacion['multiplicacion'] ?? 0 },
-    { key: 'nivel_division',       label: 'División',       nivel: resultado.nivel_division,       correctos: resultado.correctos_por_operacion['division'] ?? 0 },
-  ];
+function PantallaResultados({
+  resultado,
+  onContinuar,
+}: {
+  resultado: PostTestResultado;
+  onContinuar: () => void;
+}) {
+  const operaciones = ['suma', 'resta', 'multiplicacion', 'division'];
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -104,41 +96,63 @@ function PantallaResultados({ resultado, onComenzarPractica }: ResultadosProps) 
       <Card className="text-center border-2 border-primary/30">
         <CardContent className="pt-8 pb-6">
           <div className="text-5xl mb-3">{resultado.perfecto ? '🏆' : '✅'}</div>
-          <h2 className="text-2xl font-bold mb-2">¡Diagnóstico completado!</h2>
+          <h2 className="text-2xl font-bold mb-2">¡Post-test completado!</h2>
           <p className="text-muted-foreground text-sm max-w-sm mx-auto">{resultado.mensaje}</p>
           <div className="mt-4 inline-flex items-center gap-2 bg-primary/10 text-primary font-bold px-4 py-2 rounded-full text-lg">
-            {NIVEL_EMOJI[resultado.nivel_actual] ?? '⭐'} Nivel inicial: {resultado.nivel_actual}
+            {resultado.total_correctos}/8 correctas
           </div>
         </CardContent>
       </Card>
 
-      {/* Niveles por operación */}
+      {/* Comparación pre-test → post-test */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Niveles asignados por operación</CardTitle>
+          <CardTitle className="text-base">Comparación Pre-test → Post-test</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Correctas por operación (máximo 2)
+          </p>
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-3">
-          {operaciones.map(({ label, nivel, correctos }) => (
-            <div
-              key={label}
-              className="flex items-center justify-between rounded-lg border bg-gray-50 px-4 py-3"
-            >
-              <div>
-                <p className="font-semibold text-sm">{label}</p>
-                <p className="text-xs text-muted-foreground">{correctos}/2 correctas</p>
+          {operaciones.map((op) => {
+            const post = resultado.correctos_por_operacion[op] ?? 0;
+            const pre = resultado.pre_correctos_por_operacion?.[op] ?? null;
+            const diff = pre !== null ? post - pre : null;
+            return (
+              <div
+                key={op}
+                className="flex items-center justify-between rounded-lg border bg-gray-50 px-4 py-3"
+              >
+                <div>
+                  <p className="font-semibold text-sm">{OP_KEY_LABEL[op]}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {pre !== null ? `Antes: ${pre}/2` : 'Sin referencia'}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-lg font-bold">Ahora: {post}/2</p>
+                  {diff !== null && (
+                    <div className={`flex items-center gap-1 text-xs font-medium justify-end ${
+                      diff > 0 ? 'text-green-600' : diff < 0 ? 'text-red-500' : 'text-gray-500'
+                    }`}>
+                      {diff > 0 ? (
+                        <><TrendingUp className="w-3 h-3" /> +{diff}</>
+                      ) : diff < 0 ? (
+                        <><TrendingDown className="w-3 h-3" /> {diff}</>
+                      ) : (
+                        <><Minus className="w-3 h-3" /> Sin cambio</>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
-              <span className="text-lg font-bold">
-                {NIVEL_EMOJI[nivel] ?? '⭐'} Nivel {nivel}
-              </span>
-            </div>
-          ))}
+            );
+          })}
         </CardContent>
       </Card>
 
-      {/* CTA */}
-      <Button size="lg" className="w-full" onClick={onComenzarPractica}>
-        <BookOpen className="h-5 w-5 mr-2" />
-        Comenzar mi primera práctica
+      {/* Botón continuar */}
+      <Button size="lg" className="w-full" onClick={onContinuar}>
+        Ir al inicio
       </Button>
     </div>
   );
@@ -146,30 +160,23 @@ function PantallaResultados({ resultado, onComenzarPractica }: ResultadosProps) 
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-export function DiagnosticPage() {
+export function PostTestPage() {
   const navigate = useNavigate();
 
-  // ── Estado de carga ────────────────────────────────────────────────────────
-  const [diagnosticoId, setDiagnosticoId] = useState<number | null>(null);
+  const [postTestId, setPostTestId] = useState<number | null>(null);
   const [problemas, setProblemas] = useState<ProblemaUI[]>([]);
   const [mensajeIntro, setMensajeIntro] = useState('');
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // ── Estado de resolución ───────────────────────────────────────────────────
   const [fase, setFase] = useState<'intro' | 'resolviendo' | 'enviando' | 'resultados'>('intro');
   const [indiceActual, setIndiceActual] = useState(0);
   const [respuestaActual, setRespuestaActual] = useState('');
   const [respuestas, setRespuestas] = useState<Record<number, number>>({});
   const [limpiarKey, setLimpiarKey] = useState(0);
+  const [resultado, setResultado] = useState<PostTestResultado | null>(null);
 
-  // ── Resultado ─────────────────────────────────────────────────────────────
-  const [resultado, setResultado] = useState<ResultadoDiagnostico | null>(null);
-
-  // ── Teclado virtual ────────────────────────────────────────────────────────
   const lastFocusedInputRef = useRef<HTMLInputElement | null>(null);
-
-  // ── Tracking de tiempo por problema ───────────────────────────────────────
   const problemStartTimeRef = useRef<number>(Date.now());
   const [tiempos, setTiempos] = useState<Record<number, number>>({});
 
@@ -178,24 +185,22 @@ export function DiagnosticPage() {
     ? Math.round(((indiceActual + 1) / problemas.length) * 100)
     : 0;
 
-  // ── Cargar diagnóstico ────────────────────────────────────────────────────
+  // ── Cargar post-test ──────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
     setCargando(true);
 
-    studentService
-      .iniciarDiagnostico()
+    studentService.iniciarPostTest()
       .then((data) => {
         if (cancelled) return;
-        setDiagnosticoId(data.diagnostico_id);
+        setPostTestId(data.post_test_id);
         setProblemas(data.problemas.map(mapearProblema));
         setMensajeIntro(data.mensaje);
       })
       .catch((err: Error) => {
         if (cancelled) return;
-        // Si ya completó el diagnóstico, redirigir a práctica
-        if (err.message.includes('diagnóstico')) {
-          navigate('/student/practice', { replace: true });
+        if (err.message.includes('ya completaste')) {
+          navigate('/student/dashboard', { replace: true });
         } else {
           setError(err.message);
         }
@@ -207,7 +212,7 @@ export function DiagnosticPage() {
     return () => { cancelled = true; };
   }, [navigate]);
 
-  // ── Rastrear el último input enfocado (para el teclado virtual) ──────────
+  // ── Teclado virtual ──────────────────────────────────────────────────────
   useEffect(() => {
     const handler = (e: FocusEvent) => {
       const el = e.target as HTMLInputElement;
@@ -246,33 +251,30 @@ export function DiagnosticPage() {
     setLimpiarKey(prev => prev + 1);
   }, []);
 
-  // ── Avanzar al siguiente problema ─────────────────────────────────────────
+  // ── Avanzar al siguiente problema ────────────────────────────────────────
   const handleSiguiente = useCallback(async () => {
-    if (!problemaActual || diagnosticoId === null) return;
+    if (!problemaActual || postTestId === null) return;
 
     const respuestaNum = parseFloat(respuestaActual.replace(',', '.'));
     if (isNaN(respuestaNum)) return;
 
-    // Registrar tiempo empleado en este problema
+    // Registrar tiempo
     const elapsed = Math.round((Date.now() - problemStartTimeRef.current) / 1000);
     const nuevosTiempos = { ...tiempos, [problemaActual.id]: elapsed };
     setTiempos(nuevosTiempos);
 
-    // Guardar respuesta
     const nuevasRespuestas = { ...respuestas, [problemaActual.id]: respuestaNum };
     setRespuestas(nuevasRespuestas);
 
     if (indiceActual < problemas.length - 1) {
-      // Siguiente problema — reiniciar temporizador
       problemStartTimeRef.current = Date.now();
       setIndiceActual(prev => prev + 1);
       setRespuestaActual('');
       setLimpiarKey(prev => prev + 1);
     } else {
-      // Último problema → enviar diagnóstico
       setFase('enviando');
       try {
-        const res = await studentService.enviarDiagnostico(diagnosticoId, nuevasRespuestas, nuevosTiempos);
+        const res = await studentService.enviarPostTest(postTestId, nuevasRespuestas, nuevosTiempos);
         setResultado(res);
         setFase('resultados');
       } catch (err) {
@@ -280,19 +282,19 @@ export function DiagnosticPage() {
         setFase('resolviendo');
       }
     }
-  }, [problemaActual, diagnosticoId, respuestaActual, respuestas, tiempos, indiceActual, problemas.length]);
+  }, [problemaActual, postTestId, respuestaActual, respuestas, tiempos, indiceActual, problemas.length]);
 
-  // ── Render: cargando ──────────────────────────────────────────────────────
+  // ── Renders ───────────────────────────────────────────────────────────────
+
   if (cargando) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="text-muted-foreground">Preparando tu diagnóstico...</p>
+        <p className="text-muted-foreground">Preparando tu evaluación final...</p>
       </div>
     );
   }
 
-  // ── Render: error ─────────────────────────────────────────────────────────
   if (error) {
     return (
       <div className="max-w-md mx-auto mt-20 space-y-4">
@@ -307,61 +309,53 @@ export function DiagnosticPage() {
     );
   }
 
-  // ── Render: enviando ──────────────────────────────────────────────────────
   if (fase === 'enviando') {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="text-muted-foreground">Calculando tus niveles...</p>
+        <p className="text-muted-foreground">Calculando tus resultados finales...</p>
       </div>
     );
   }
 
-  // ── Render: resultados ────────────────────────────────────────────────────
   if (fase === 'resultados' && resultado) {
     return (
       <PantallaResultados
         resultado={resultado}
-        onComenzarPractica={() => navigate('/student/practice')}
+        onContinuar={() => navigate('/student/dashboard')}
       />
     );
   }
 
-  // ── Render: pantalla de intro ─────────────────────────────────────────────
   if (fase === 'intro') {
     return (
       <div className="max-w-2xl mx-auto space-y-6">
         <Card className="border-2 border-primary/30">
           <CardContent className="pt-8 pb-6 text-center space-y-4">
-            <div className="text-5xl">📋</div>
-            <h2 className="text-2xl font-bold">Prueba Diagnóstica</h2>
+            <div className="text-5xl">📊</div>
+            <h2 className="text-2xl font-bold">Evaluación Final</h2>
             <p className="text-muted-foreground max-w-sm mx-auto">
-              {mensajeIntro || 'Antes de comenzar, realizaremos una prueba corta para conocer tu nivel y personalizar tu aprendizaje.'}
+              {mensajeIntro || 'Esta es tu evaluación final. Nos ayudará a medir cuánto has mejorado desde el inicio.'}
             </p>
             <div className="grid grid-cols-2 gap-3 text-left mt-4">
-              <div className="flex items-start gap-2 bg-gray-50 rounded-lg p-3">
-                <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
-                <p className="text-sm text-gray-700">8 problemas en total (2 por cada operación)</p>
-              </div>
-              <div className="flex items-start gap-2 bg-gray-50 rounded-lg p-3">
-                <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
-                <p className="text-sm text-gray-700">Sin tiempo límite, tómatelo con calma</p>
-              </div>
-              <div className="flex items-start gap-2 bg-gray-50 rounded-lg p-3">
-                <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
-                <p className="text-sm text-gray-700">No hay retroalimentación inmediata</p>
-              </div>
-              <div className="flex items-start gap-2 bg-gray-50 rounded-lg p-3">
-                <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
-                <p className="text-sm text-gray-700">Al finalizar verás tu nivel inicial asignado</p>
-              </div>
+              {[
+                '8 problemas en total (2 por cada operación)',
+                'Sin tiempo límite, tómatelo con calma',
+                'No hay retroalimentación inmediata',
+                'Al finalizar verás tu comparación con el inicio',
+              ].map((text) => (
+                <div key={text} className="flex items-start gap-2 bg-gray-50 rounded-lg p-3">
+                  <ClipboardCheck className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-gray-700">{text}</p>
+                </div>
+              ))}
             </div>
             <Button size="lg" className="mt-2 px-8" onClick={() => {
               problemStartTimeRef.current = Date.now();
               setFase('resolviendo');
             }}>
-              <ClipboardList className="h-5 w-5 mr-2" />
-              Comenzar diagnóstico
+              <ClipboardCheck className="h-5 w-5 mr-2" />
+              Comenzar evaluación final
             </Button>
           </CardContent>
         </Card>
@@ -369,7 +363,6 @@ export function DiagnosticPage() {
     );
   }
 
-  // ── Render: resolviendo ───────────────────────────────────────────────────
   if (!problemaActual) return null;
 
   const puedeAvanzar = respuestaActual.trim() !== '' && !isNaN(parseFloat(respuestaActual.replace(',', '.')));
@@ -382,7 +375,7 @@ export function DiagnosticPage() {
         <CardContent className="pt-6">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-3">
-              <ClipboardList className="h-5 w-5 text-muted-foreground" />
+              <ClipboardCheck className="h-5 w-5 text-muted-foreground" />
               <h2 className="text-lg font-bold">
                 Problema {indiceActual + 1} de {problemas.length}
               </h2>
@@ -398,9 +391,8 @@ export function DiagnosticPage() {
         </CardContent>
       </Card>
 
-      {/* Teclado + Problema en fila — teclado izquierda, problema derecha */}
+      {/* Teclado + Problema */}
       <div className="flex flex-col sm:flex-row gap-4 items-start">
-        {/* Teclado virtual */}
         <div className="w-full sm:w-44 flex-shrink-0 order-last sm:order-first">
           <VirtualKeyboard
             onKeyPress={handleVirtualKeyPress}
@@ -408,15 +400,13 @@ export function DiagnosticPage() {
             onClear={handleLimpiar}
           />
         </div>
-
-        {/* Problema */}
         <Card className="flex-1 min-w-0">
           <CardHeader>
             <CardTitle>{OPERACION_LABEL[problemaActual.operacion]}</CardTitle>
           </CardHeader>
           <CardContent className="flex justify-center">
             <ProblemGrid
-              key={`diag-${indiceActual}-${limpiarKey}`}
+              key={`pt-${indiceActual}-${limpiarKey}`}
               operacion={problemaActual.operacion}
               numero1={problemaActual.numero1}
               numero2={problemaActual.numero2}
@@ -443,8 +433,8 @@ export function DiagnosticPage() {
         >
           {esUltimo ? (
             <>
-              <CheckCircle2 className="h-5 w-5 mr-2" />
-              Finalizar diagnóstico
+              <ClipboardCheck className="h-5 w-5 mr-2" />
+              Finalizar evaluación
             </>
           ) : (
             <>
@@ -455,9 +445,8 @@ export function DiagnosticPage() {
         </Button>
       </div>
 
-      {/* Nota informativa */}
       <p className="text-center text-xs text-muted-foreground">
-        Esta es una prueba de diagnóstico. Los resultados solo se evalúan al final.
+        Esta es tu evaluación final. Los resultados no modifican tu progreso de práctica.
       </p>
     </div>
   );
